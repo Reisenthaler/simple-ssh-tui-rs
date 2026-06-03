@@ -1,7 +1,15 @@
-use std::{fs, io::{ Error, ErrorKind }, path::Path};
+use std::{ fmt::format, fs, io::{ Error, ErrorKind, }, os::unix::process::CommandExt, path::Path, process::Command };
+use crossterm::{
+    event::{ self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode }, 
+    
+    execute, 
+    terminal::{disable_raw_mode, enable_raw_mode}};
 use serde::{ Deserialize, Serialize,  };
 use beautiful_log;
-use tracing::{ debug, info, warn, error };
+use tracing::{ debug, error, info, warn };
+use ratatui::{ 
+    Terminal, TerminalOptions, Viewport, backend::{ Backend, CrosstermBackend }, layout::{ Constraint, Direction, Layout }, macros::ratatui_core::backend, style::{Modifier, Style, Stylize}, widgets::{ Block, Borders, List, ListItem, ListState, Paragraph }
+    };
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
@@ -17,10 +25,12 @@ struct SshHost {
 fn main() -> Result<()> {
     beautiful_log::init_logging("INFO");
     let ssh_hosts_result =  parse_ssh_config();
-
+    let mut ssh_hosts: Vec<SshHost>;
+    
     match ssh_hosts_result {
-        Ok(ssh_hosts) => {
-            info!("ssh_config: {:?}", ssh_hosts);
+        Ok(hosts) => {
+            ssh_hosts = hosts;
+            debug!("ssh_config: {:?}", ssh_hosts);
         },
         Err(e) => {
             return Err(e);
@@ -28,7 +38,119 @@ fn main() -> Result<()> {
         
     }
 
+    println!("simple-ssh-tui-rs :)");
 
+    enable_raw_mode()?;
+    let mut stdout = std::io::stdout();
+    
+       execute!(stdout, EnableMouseCapture)?;
+
+       let backend = CrosstermBackend::new(stdout);
+
+       let mut terminal = Terminal::with_options(backend, 
+           TerminalOptions {
+               viewport: Viewport::Inline(20),
+       })?;
+
+       let mut list_state = ListState::default();
+       list_state.select(Some(0));
+
+       let mut selected_ssh_host: Option<String> = None;
+       
+    loop {
+       terminal.draw(|f| {
+           let chunks = Layout::default()
+               .direction(Direction::Vertical)
+               .constraints([
+                   Constraint::Min(10),
+                   Constraint::Length(7),
+               ])
+               .split(f.size());
+
+
+           let items: Vec<ListItem> = ssh_hosts
+            .iter()
+            .map(|host| {
+                let display_text = match &host.host_name {
+                    Some(ip) => format!("{} ({})", host.host, ip),
+                    None => format!("{}", host.host)
+                };
+           ListItem::new(display_text)
+            })
+            .collect();
+
+
+           let list = List::new(items)
+            .block(Block::default().borders(Borders::NONE))
+            .highlight_style(
+                Style::default()
+                    .add_modifier(Modifier::BOLD),
+            )
+            .highlight_symbol("->");
+
+           f.render_stateful_widget(list, chunks[0], &mut list_state);
+       });
+
+       if let Event::Key(key) = event::read()? {
+           match key.code {
+               KeyCode::Esc | KeyCode::Char('c') => break,
+               KeyCode::Down => {
+                   let i = match list_state.selected() {
+                       Some(i) => {
+                           if i >= ssh_hosts.len() - 1 {
+                               0
+                           }
+                           else {
+                               i + 1
+                           }
+                       },
+                       None => 0
+                   };
+                   list_state.select(Some(i));
+               },
+               KeyCode::Up => {
+                   let i = match list_state.selected() {
+                       Some(i) => {
+                           if i == 0 {
+                               ssh_hosts.len()
+                           }
+                           else {
+                               i - 1
+                           }
+                       },
+                       None => 0
+                   };
+                   list_state.select(Some(i));
+               },
+               KeyCode::Enter => {
+                 if let Some(index) = list_state.selected() {
+                     selected_ssh_host = Some(ssh_hosts[index].host.clone())
+                 }  
+                 break;
+               },
+               _ => {}
+           }
+           
+       } 
+    }
+
+    disable_raw_mode();
+    execute!(terminal.backend_mut(), DisableMouseCapture)?;
+    terminal.show_cursor()?;
+
+
+    if let Some(host) = selected_ssh_host {
+        info!("starting ssh");
+
+        let mut child = Command::new("ssh");
+        child.arg(host);
+
+        let error = child.exec();
+
+        error!("starting ssh failed with: {}", error);
+    } 
+
+    
     Ok(())
 }
 
