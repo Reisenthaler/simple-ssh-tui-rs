@@ -1,3 +1,5 @@
+use std::os::unix::process;
+use std::process::Stdio;
 use std::{ os::unix::process::CommandExt, process::Command };
 use std::io::Stdout;
 use crossterm::{
@@ -97,9 +99,19 @@ fn start_ssh_process(ssh_host: SshHost) {
         let mut child = Command::new("ssh");
         child.arg(ssh_host.host);
 
-        let error = child.exec();
+        child.stdin(Stdio::inherit())
+            .stdout(Stdio::inherit())
+            .stderr(Stdio::inherit());
 
-        error!("starting ssh failed with: {}", error);
+        match child.spawn() {
+            Ok(mut process) => {
+                let _ = process.wait();
+            },
+            Err(e) => {
+                error!("starting ssh failed: {}", e);
+            }
+            
+        }
 }
 
 
