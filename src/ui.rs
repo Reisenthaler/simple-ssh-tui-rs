@@ -1,55 +1,109 @@
-use std::io::Stdout;
+use std::{fmt::format, io::Stdout};
 use ratatui::{ 
     Terminal, 
     backend::CrosstermBackend, 
     layout::{ Constraint, Direction, Layout, Position }, 
     style::{Modifier, Style }, 
-    widgets::{ Block, Borders, List, ListItem, ListState }
+    widgets::{ Block, Borders, List, ListItem, ListState, Paragraph }
     };
 use tracing::error;
-use crate::ssh_config::SshHost;
+use crate::{AppMode, RsyncActiveInput, ssh_config::SshHost};
 
-
-pub fn draw_ui(terminal: &mut Terminal<CrosstermBackend<Stdout>>, ssh_hosts: &Vec<SshHost>, selected_ssh_host: SshHost, mut list_state: &mut ListState) {
+pub fn draw_ui(terminal: &mut Terminal<CrosstermBackend<Stdout>>, ssh_hosts: &Vec<SshHost>, selected_ssh_host: SshHost, mut list_state: &mut ListState,
+    app_mode: &AppMode, rsync_active_input: &RsyncActiveInput, rsync_local_path: &String, rsycn_remote_path: &String) {
     let terminal_draw_result = terminal.draw(|f| {
-        let chunks = Layout::default()
-            .direction(Direction::Vertical)
-            .constraints([
-                Constraint::Min(2),
-                Constraint::Length(8),
-            ])
-            .split(f.area());
 
-
-        let items: Vec<ListItem> = ssh_hosts
-         .iter()
-         .map(|host| {
-             let display_text = match &host.host_name {
-                 Some(ip) => format!("{} ({})", host.host, ip),
-                 None => format!("{}", host.host)
-             };
-        ListItem::new(display_text)
-         })
-         .collect();
-
-
-        let list = List::new(items)
-         .block(Block::default().borders(Borders::NONE))
-         .highlight_style(
-             Style::default()
-                 .add_modifier(Modifier::BOLD),
-         )
-         .highlight_symbol("->");
-
-        let host_details: Vec<ListItem> = get_host_detail_list(&selected_ssh_host);
+        match app_mode {
+            AppMode::SelectHost => {
+                let chunks = Layout::default()
+                    .direction(Direction::Vertical)
+                    .constraints([
+                        Constraint::Min(2),
+                        Constraint::Length(8),
+                    ])
+                    .split(f.area());
         
-        let ssh_host_details = List::new(host_details)
-            .block(Block::default().borders(Borders::TOP).title("------- SSH Details "));
-
         
-        f.render_stateful_widget(list, chunks[0], &mut list_state);
-        f.render_stateful_widget(ssh_host_details, chunks[1], &mut list_state);
+                let items: Vec<ListItem> = ssh_hosts
+                .iter()
+                .map(|host| {
+                    let display_text = match &host.host_name {
+                        Some(ip) => format!("{} ({})", host.host, ip),
+                        None => format!("{}", host.host)
+                    };
+                ListItem::new(display_text)
+                })
+                .collect();
+        
+        
+                let list = List::new(items)
+                .block(Block::default().borders(Borders::NONE))
+                .highlight_style(
+                    Style::default()
+                        .add_modifier(Modifier::BOLD),
+                )
+                .highlight_symbol("->");
+        
+                let host_details: Vec<ListItem> = get_host_detail_list(&selected_ssh_host);
+                
+                let ssh_host_details = List::new(host_details)
+                    .block(Block::default().borders(Borders::TOP).title("------- SSH Details "));
+        
+                
+                f.render_stateful_widget(list, chunks[0], &mut list_state);
+                f.render_stateful_widget(ssh_host_details, chunks[1], &mut list_state);
+            }
+            AppMode::Rsync => {
+                let vertical_chunks = Layout::default()
+                    .direction(Direction::Vertical)
+                    .constraints([
+                        Constraint::Length(3),
+                        Constraint::Min(0),
+                    ])
+                    .split(f.area());
+                let horizontal_chunks = Layout::default()
+                    .direction(Direction::Horizontal)
+                    .constraints([
+                        Constraint::Percentage(33),                        
+                        Constraint::Percentage(34),
+                        Constraint::Percentage(33),
+                    ])
+                    .split(vertical_chunks[0]);
 
+                let local_path_input = Paragraph::new(rsync_local_path.to_string())
+                    .block(Block::default()
+                        .borders(Borders::ALL).title(" Local Path "));
+                f.render_widget(local_path_input, horizontal_chunks[0]);
+                
+                let local_path_input = Paragraph::new(format!(" {}", selected_ssh_host.host))
+                    .block(Block::default()
+                    .borders(Borders::ALL).title(" ssh host "));
+
+                f.render_widget(local_path_input, horizontal_chunks[1]);        
+
+                let remote_path_input = Paragraph::new(rsycn_remote_path.to_string())
+                    .block(Block::default()
+                    .borders(Borders::ALL).title(" Remote Path "));
+
+                f.render_widget(remote_path_input, horizontal_chunks[2]);
+
+
+                let active_chunk = match rsync_active_input {
+                    RsyncActiveInput::Left => horizontal_chunks[0],
+                    RsyncActiveInput::Right => horizontal_chunks[2],
+                };
+
+                let current_input_path_text_len = match rsync_active_input {
+                    RsyncActiveInput::Left => rsync_local_path.len(),
+                    RsyncActiveInput::Right => rsycn_remote_path.len(),
+                };
+
+                f.set_cursor_position(Position::new(
+                    active_chunk.x + 1 + current_input_path_text_len as u16,
+                    active_chunk.y + 1
+                ));
+            }
+    }
     });
 
 

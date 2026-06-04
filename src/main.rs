@@ -23,6 +23,18 @@ use crate::ssh_config::SshHost;
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
+#[derive(PartialEq)]
+enum AppMode {
+    SelectHost,
+    Rsync
+}
+
+#[derive(PartialEq)]
+enum RsyncActiveInput {
+    Left,
+    Right
+}
+
 fn main() -> Result<()> {
     beautiful_log::init_logging("INFO");
     
@@ -33,10 +45,15 @@ fn main() -> Result<()> {
 
     let mut selected_ssh_host: SshHost = ssh_hosts[0].clone();
 
+    let mut app_mode = AppMode::SelectHost;
+    let mut rsync_active_input = RsyncActiveInput::Left;
+    let mut rsync_local_path = String::new();    
+    let mut rsync_remote_path = String::new();
+
     let mut terminal = setup_terminal(ssh_hosts.len())?;
        
     loop {
-        draw_ui(&mut terminal, &ssh_hosts, selected_ssh_host.clone(), &mut list_state);
+        draw_ui(&mut terminal, &ssh_hosts, selected_ssh_host.clone(), &mut list_state, &app_mode, &rsync_active_input, &rsync_local_path, &rsync_remote_path);
 
        if let Event::Key(key) = event::read()? {
            match key.code {
@@ -44,6 +61,30 @@ fn main() -> Result<()> {
                    restore_terminal_to_normal_mode(&mut terminal)?;
                    return Ok(())
                },
+               KeyCode::Char('r') |  KeyCode::Char('R') => {
+                   match app_mode {
+                       AppMode::SelectHost => app_mode = AppMode::Rsync,
+                       AppMode::Rsync => app_mode = AppMode::SelectHost,
+                   }
+               },
+               KeyCode::Left => {
+                   if app_mode == AppMode::Rsync {
+                       rsync_active_input = RsyncActiveInput::Left;
+                   }
+               },
+               KeyCode::Right => {
+                   if app_mode == AppMode::Rsync {
+                       rsync_active_input = RsyncActiveInput::Right;
+                   }
+               },
+               KeyCode::Char(c) => {
+                   if app_mode == AppMode::Rsync {
+                       match rsync_active_input {
+                           RsyncActiveInput::Left => rsync_local_path.push(c),
+                           RsyncActiveInput::Right => rsync_remote_path.push(c),
+                       }
+                   }  
+               }
                KeyCode::Down => {
                    let i = match list_state.selected() {
                        Some(i) => {
