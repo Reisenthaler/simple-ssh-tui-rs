@@ -40,7 +40,10 @@ fn main() -> Result<()> {
 
        if let Event::Key(key) = event::read()? {
            match key.code {
-               KeyCode::Esc | KeyCode::Char('c') => return Ok(()),
+               KeyCode::Esc | KeyCode::Char('c') => {
+                   restore_terminal_to_normal_mode(&mut terminal)?;
+                   return Ok(())
+               },
                KeyCode::Down => {
                    let i = match list_state.selected() {
                        Some(i) => {
