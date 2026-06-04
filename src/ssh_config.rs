@@ -1,5 +1,5 @@
 use std::{ fs, io::{ Error, ErrorKind, } };
-use tracing::{ debug, error, info, warn };
+use tracing::{ debug, error };
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 

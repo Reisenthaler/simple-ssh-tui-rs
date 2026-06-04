@@ -1,11 +1,10 @@
 use std::io::Stdout;
 use ratatui::{ 
-    Terminal, TerminalOptions, Viewport, 
+    Terminal, 
     backend::{ Backend, CrosstermBackend }, 
     layout::{ Constraint, Direction, Layout }, 
-    macros::ratatui_core::{backend, terminal}, 
     style::{Modifier, Style, Stylize}, 
-    widgets::{ Block, Borders, List, ListItem, ListState, Paragraph }
+    widgets::{ Block, Borders, List, ListItem, ListState }
     };
 use crate::ssh_config::SshHost;
 

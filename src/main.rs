@@ -1,19 +1,15 @@
-use std::{ fmt::format, fs, io::{ Error, ErrorKind, }, os::unix::process::CommandExt, path::Path, process::Command, time::Instant };
+use std::{ os::unix::process::CommandExt, process::Command };
 use std::io::Stdout;
 use crossterm::{
     event::{ self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode }, 
     execute, 
     terminal::{disable_raw_mode, enable_raw_mode}};
-use serde::{ Deserialize, Serialize,  };
 use beautiful_log;
-use tracing::{ debug, error, info, warn };
+use tracing::{ debug, error, info };
 use ratatui::{ 
     Terminal, TerminalOptions, Viewport, 
     backend::{ Backend, CrosstermBackend }, 
-    layout::{ Constraint, Direction, Layout }, 
-    macros::ratatui_core::{backend, terminal}, 
-    style::{Modifier, Style, Stylize}, 
-    widgets::{ Block, Borders, List, ListItem, ListState, Paragraph }
+    widgets::ListState
     };
 
 mod ssh_config;
@@ -125,7 +121,7 @@ fn setup_terminal() -> std::result::Result<Terminal<CrosstermBackend<Stdout>>, s
 
        let backend = CrosstermBackend::new(stdout);
 
-       let mut terminal = Terminal::with_options(backend, 
+       let terminal = Terminal::with_options(backend, 
            TerminalOptions {
                viewport: Viewport::Inline(20),
        });
