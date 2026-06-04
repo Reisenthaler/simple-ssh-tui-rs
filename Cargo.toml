@@ -10,3 +10,10 @@ ratatui = "0.30.0"
 serde = "1.0.228"
 beautiful_log = { git = "https://github.com/Reisenthaler/beautiful_log" }
 tracing = "0.1.44"
+
+[profile.release]
+panic = "abort"          # eliminates unwinding tables → smaller binary
+codegen-units = 1        # allows more inlining & cross‑crate optimisation
+lto = true               # link‑time optimisation → drops dead code
+strip = true             # removes symbol tables (same as `strip` command)
+opt-level = 3            # (default) maximum speed optimisation
