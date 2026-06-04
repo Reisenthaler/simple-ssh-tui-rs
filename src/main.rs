@@ -5,16 +5,16 @@ use crossterm::{
     execute, 
     terminal::{disable_raw_mode, enable_raw_mode}};
 use beautiful_log;
-use tracing::{ debug, error, info };
+use tracing::{ error, info };
 use ratatui::{ 
     Terminal, TerminalOptions, Viewport, 
-    backend::{ Backend, CrosstermBackend }, 
+    backend::{ CrosstermBackend }, 
     widgets::ListState
     };
 
 mod ssh_config;
 mod ui;
-use ssh_config::{ parse_ssh_config, SshHost };
+use ssh_config::{ parse_ssh_config };
 use ui::draw_ui;
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
@@ -22,20 +22,8 @@ type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 fn main() -> Result<()> {
     beautiful_log::init_logging("INFO");
     
-    let ssh_hosts_result = parse_ssh_config();
-    let ssh_hosts: Vec<SshHost>;
+    let ssh_hosts = parse_ssh_config()?;
     
-    match ssh_hosts_result {
-        Ok(hosts) => {
-            ssh_hosts = hosts;
-            debug!("ssh_config: {:?}", ssh_hosts);
-        },
-        Err(e) => {
-            return Err(e);
-        }
-        
-    }
-
     println!("simple-ssh-tui-rs :)");
 
     let mut list_state = ListState::default();
@@ -91,7 +79,7 @@ fn main() -> Result<()> {
        } 
     }
 
-    restore_terminal_to_normal_mode(&mut terminal);
+    restore_terminal_to_normal_mode(&mut terminal)?;
     
     start_ssh_process(selected_ssh_host);
     
@@ -114,10 +102,10 @@ fn start_ssh_process(ssh_host: Option<String>) {
 
 fn setup_terminal() -> std::result::Result<Terminal<CrosstermBackend<Stdout>>, std::io::Error> {
     
-    enable_raw_mode();
+    enable_raw_mode()?;
     let mut stdout = std::io::stdout();
     
-       execute!(stdout, EnableMouseCapture);
+       execute!(stdout, EnableMouseCapture)?;
 
        let backend = CrosstermBackend::new(stdout);
 
@@ -129,8 +117,10 @@ fn setup_terminal() -> std::result::Result<Terminal<CrosstermBackend<Stdout>>, s
        return terminal;
 }
 
-fn restore_terminal_to_normal_mode(terminal: &mut Terminal<CrosstermBackend<Stdout>>) {
-    disable_raw_mode();
-    execute!(terminal.backend_mut(), DisableMouseCapture);
-    terminal.show_cursor();   
+fn restore_terminal_to_normal_mode(terminal: &mut Terminal<CrosstermBackend<Stdout>>) -> Result<()>{
+    disable_raw_mode()?;
+    execute!(terminal.backend_mut(), DisableMouseCapture)?;
+    terminal.show_cursor()?;   
+
+    Ok(())
 }

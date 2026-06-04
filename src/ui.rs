@@ -1,23 +1,24 @@
 use std::io::Stdout;
 use ratatui::{ 
     Terminal, 
-    backend::{ Backend, CrosstermBackend }, 
+    backend::{ CrosstermBackend }, 
     layout::{ Constraint, Direction, Layout }, 
-    style::{Modifier, Style, Stylize}, 
+    style::{Modifier, Style }, 
     widgets::{ Block, Borders, List, ListItem, ListState }
     };
+use tracing::error;
 use crate::ssh_config::SshHost;
 
 
 pub fn draw_ui(terminal: &mut Terminal<CrosstermBackend<Stdout>>, ssh_hosts: &Vec<SshHost>, mut list_state: &mut ListState) {
-    terminal.draw(|f| {
+    let terminal_draw_result = terminal.draw(|f| {
         let chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
                 Constraint::Min(10),
                 Constraint::Length(7),
             ])
-            .split(f.size());
+            .split(f.area());
 
 
         let items: Vec<ListItem> = ssh_hosts
@@ -42,4 +43,12 @@ pub fn draw_ui(terminal: &mut Terminal<CrosstermBackend<Stdout>>, ssh_hosts: &Ve
 
         f.render_stateful_widget(list, chunks[0], &mut list_state);
     });
+
+
+    match terminal_draw_result {
+        Ok(_) => {}
+        Err(e) => {
+            error!("error drawing to terminal: {}", e);
+        }
+    }
 }
