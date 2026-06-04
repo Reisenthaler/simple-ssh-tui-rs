@@ -17,6 +17,8 @@ mod ui;
 use ssh_config::{ parse_ssh_config };
 use ui::draw_ui;
 
+use crate::ssh_config::SshHost;
+
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
 fn main() -> Result<()> {
@@ -29,16 +31,16 @@ fn main() -> Result<()> {
     let mut list_state = ListState::default();
     list_state.select(Some(0));
 
-    let mut selected_ssh_host: Option<String> = None;
+    let mut selected_ssh_host: SshHost = ssh_hosts[0].clone();
 
-    let mut terminal = setup_terminal()?;
+    let mut terminal = setup_terminal(ssh_hosts.len())?;
        
     loop {
-        draw_ui(&mut terminal, &ssh_hosts, &mut list_state);
+        draw_ui(&mut terminal, &ssh_hosts, selected_ssh_host.clone(), &mut list_state);
 
        if let Event::Key(key) = event::read()? {
            match key.code {
-               KeyCode::Esc | KeyCode::Char('c') => break,
+               KeyCode::Esc | KeyCode::Char('c') => return Ok(()),
                KeyCode::Down => {
                    let i = match list_state.selected() {
                        Some(i) => {
@@ -68,15 +70,17 @@ fn main() -> Result<()> {
                    list_state.select(Some(i));
                },
                KeyCode::Enter => {
-                 if let Some(index) = list_state.selected() {
-                     selected_ssh_host = Some(ssh_hosts[index].host.clone())
-                 }  
                  break;
                },
                _ => {}
            }
            
        } 
+       if let Some(index) = list_state.selected() {
+           if index < ssh_hosts.len() {
+               selected_ssh_host = ssh_hosts[index].clone()
+           }
+       }  
     }
 
     restore_terminal_to_normal_mode(&mut terminal)?;
@@ -86,21 +90,19 @@ fn main() -> Result<()> {
     Ok(())
 }
 
-fn start_ssh_process(ssh_host: Option<String>) {
-    if let Some(host) = ssh_host {
+fn start_ssh_process(ssh_host: SshHost) {
         info!("starting ssh");
 
         let mut child = Command::new("ssh");
-        child.arg(host);
+        child.arg(ssh_host.host);
 
         let error = child.exec();
 
         error!("starting ssh failed with: {}", error);
-    } 
 }
 
 
-fn setup_terminal() -> std::result::Result<Terminal<CrosstermBackend<Stdout>>, std::io::Error> {
+fn setup_terminal(ssh_hosts_count: usize) -> std::result::Result<Terminal<CrosstermBackend<Stdout>>, std::io::Error> {
     
     enable_raw_mode()?;
     let mut stdout = std::io::stdout();
@@ -111,7 +113,7 @@ fn setup_terminal() -> std::result::Result<Terminal<CrosstermBackend<Stdout>>, s
 
        let terminal = Terminal::with_options(backend, 
            TerminalOptions {
-               viewport: Viewport::Inline(20),
+               viewport: Viewport::Inline((ssh_hosts_count + 8).try_into().unwrap()),
        });
 
        return terminal;

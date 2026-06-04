@@ -1,8 +1,8 @@
 use std::io::Stdout;
 use ratatui::{ 
     Terminal, 
-    backend::{ CrosstermBackend }, 
-    layout::{ Constraint, Direction, Layout }, 
+    backend::CrosstermBackend, 
+    layout::{ Constraint, Direction, Layout, Position }, 
     style::{Modifier, Style }, 
     widgets::{ Block, Borders, List, ListItem, ListState }
     };
@@ -10,13 +10,13 @@ use tracing::error;
 use crate::ssh_config::SshHost;
 
 
-pub fn draw_ui(terminal: &mut Terminal<CrosstermBackend<Stdout>>, ssh_hosts: &Vec<SshHost>, mut list_state: &mut ListState) {
+pub fn draw_ui(terminal: &mut Terminal<CrosstermBackend<Stdout>>, ssh_hosts: &Vec<SshHost>, selected_ssh_host: SshHost, mut list_state: &mut ListState) {
     let terminal_draw_result = terminal.draw(|f| {
         let chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
-                Constraint::Min(10),
-                Constraint::Length(7),
+                Constraint::Min(2),
+                Constraint::Length(8),
             ])
             .split(f.area());
 
@@ -41,7 +41,15 @@ pub fn draw_ui(terminal: &mut Terminal<CrosstermBackend<Stdout>>, ssh_hosts: &Ve
          )
          .highlight_symbol("->");
 
+        let host_details: Vec<ListItem> = get_host_detail_list(&selected_ssh_host);
+        
+        let ssh_host_details = List::new(host_details)
+            .block(Block::default().borders(Borders::TOP).title("------- SSH Details "));
+
+        
         f.render_stateful_widget(list, chunks[0], &mut list_state);
+        f.render_stateful_widget(ssh_host_details, chunks[1], &mut list_state);
+
     });
 
 
@@ -51,4 +59,25 @@ pub fn draw_ui(terminal: &mut Terminal<CrosstermBackend<Stdout>>, ssh_hosts: &Ve
             error!("error drawing to terminal: {}", e);
         }
     }
+}
+
+fn get_host_detail_list(ssh_host: &SshHost) -> Vec<ListItem> {
+    let mut host_details: Vec<ListItem> = Vec::new();
+
+    host_details.push(ListItem::new(format!("Alias:     {}", ssh_host.host)));
+
+    if let Some(ref host_name) = ssh_host.host_name {
+        host_details.push(ListItem::new(format!("Host:      {}", host_name)));
+    }
+    if let Some(ref port) = ssh_host.port {
+        host_details.push(ListItem::new(format!("Port:      {}", port)));
+    }
+    if let Some(ref user) = ssh_host.user {
+        host_details.push(ListItem::new(format!("User:      {}", user)));
+    }
+    if let Some(ref proxy_jump) = ssh_host.proxy_jump {
+        host_details.push(ListItem::new(format!("ProxyJump: {}", proxy_jump)));
+    }
+
+    return host_details;
 }
