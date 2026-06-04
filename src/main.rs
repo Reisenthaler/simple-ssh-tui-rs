@@ -60,7 +60,7 @@ fn main() -> Result<()> {
                    let i = match list_state.selected() {
                        Some(i) => {
                            if i == 0 {
-                               ssh_hosts.len()
+                               ssh_hosts.len() - 1
                            }
                            else {
                                i - 1
