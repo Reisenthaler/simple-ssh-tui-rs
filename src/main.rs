@@ -26,8 +26,6 @@ fn main() -> Result<()> {
     
     let ssh_hosts = parse_ssh_config()?;
     
-    println!("simple-ssh-tui-rs :)");
-
     let mut list_state = ListState::default();
     list_state.select(Some(0));
 
@@ -123,6 +121,7 @@ fn setup_terminal(ssh_hosts_count: usize) -> std::result::Result<Terminal<Crosst
 }
 
 fn restore_terminal_to_normal_mode(terminal: &mut Terminal<CrosstermBackend<Stdout>>) -> Result<()>{
+    terminal.clear()?;
     disable_raw_mode()?;
     execute!(terminal.backend_mut(), DisableMouseCapture)?;
     terminal.show_cursor()?;   
