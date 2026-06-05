@@ -6,11 +6,12 @@ use ratatui::{
     style::{Modifier, Style }, 
     widgets::{ Block, Borders, List, ListItem, ListState, Paragraph }
     };
-use tracing::error;
-use crate::{AppMode, RsyncActiveInput, ssh_config::SshHost};
+use tracing::{error, info};
+use crate::{AppMode, RsyncActiveInput, split_path, ssh_config::SshHost};
 
 pub fn draw_ui(terminal: &mut Terminal<CrosstermBackend<Stdout>>, ssh_hosts: &Vec<SshHost>, selected_ssh_host: SshHost, mut list_state: &mut ListState,
-    app_mode: &AppMode, rsync_active_input: &RsyncActiveInput, rsync_local_path: &String, rsycn_remote_path: &String) {
+    app_mode: &AppMode, rsync_active_input: &RsyncActiveInput, rsync_local_path: &mut String, mut rsycn_remote_path: &mut String,
+    is_fetching: bool, local_suggestions: &mut Vec<String>, remote_suggestions: &mut Vec<String>) {
     let terminal_draw_result = terminal.draw(|f| {
 
         match app_mode {
@@ -102,6 +103,43 @@ pub fn draw_ui(terminal: &mut Terminal<CrosstermBackend<Stdout>>, ssh_hosts: &Ve
                     active_chunk.x + 1 + current_input_path_text_len as u16,
                     active_chunk.y + 1
                 ));
+
+                match rsync_active_input {
+                    RsyncActiveInput::Left => {
+                        if !local_suggestions.is_empty() {
+                            if local_suggestions.len() == 1 {
+                                let (parent_dir, _) = split_path(&rsync_local_path);
+        
+                                *rsync_local_path = format!("{}{}", parent_dir, local_suggestions[0]);
+        
+                                local_suggestions.clear();
+                            }
+                        }
+                        
+                        let path_suggestions = Paragraph::new(format!("{:?}", local_suggestions))
+                            .block(Block::default()
+                            .borders(Borders::ALL).title(" local "));
+                        f.render_widget(path_suggestions, vertical_chunks[1]);     
+                    },
+                    RsyncActiveInput::Right => {  
+                        if !remote_suggestions.is_empty() {
+                            if remote_suggestions.len() == 1 {
+                                let (parent_dir, _) = split_path(&rsycn_remote_path);
+        
+                                *rsycn_remote_path = format!("{}{}", parent_dir, remote_suggestions[0]);
+        
+                                remote_suggestions.clear();
+                            }
+                        }
+                        
+                        let path_suggestions = Paragraph::new(format!("{:?}", remote_suggestions))
+                            .block(Block::default()
+                            .borders(Borders::ALL).title(" ssh host "));
+                        f.render_widget(path_suggestions, vertical_chunks[1]);        
+                    }
+                }
+              
+                
             }
     }
     });
