@@ -4,7 +4,7 @@ use ratatui::{
     backend::CrosstermBackend, 
     layout::{ Constraint, Direction, Layout, Position }, 
     style::{Modifier, Style }, 
-    widgets::{ Block, Borders, List, ListItem, ListState, Paragraph }
+    widgets::{ Block, Borders, List, ListItem, ListState, Paragraph, Wrap }
     };
 use tracing::{error, info};
 use crate::{AppMode, RsyncActiveInput, RsyncStatus, split_path, ssh_config::SshHost};
@@ -117,9 +117,10 @@ pub fn draw_ui(terminal: &mut Terminal<CrosstermBackend<Stdout>>, ssh_hosts: &Ve
                             }
                         }
                         
-                        let path_suggestions = Paragraph::new(format!("{:?}", local_suggestions))
+                        let path_suggestions = Paragraph::new(format!("{}", local_suggestions.join(" ")))
                             .block(Block::default()
-                            .borders(Borders::ALL).title(" local "));
+                            .borders(Borders::ALL).title(" local "))
+                            .wrap(Wrap { trim: true });
                         f.render_widget(path_suggestions, vertical_chunks[1]);     
                     },
                     RsyncActiveInput::Right => {  
@@ -133,9 +134,10 @@ pub fn draw_ui(terminal: &mut Terminal<CrosstermBackend<Stdout>>, ssh_hosts: &Ve
                             }
                         }
                         
-                        let path_suggestions = Paragraph::new(format!("{:?}", remote_suggestions))
+                        let path_suggestions = Paragraph::new(format!("{}", remote_suggestions.join(" ")))
                             .block(Block::default()
-                            .borders(Borders::ALL).title(" ssh host "));
+                            .borders(Borders::ALL).title(" ssh host "))
+                            .wrap(Wrap { trim: true });
                         f.render_widget(path_suggestions, vertical_chunks[1]);        
                     }
                 }
