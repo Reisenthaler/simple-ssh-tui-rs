@@ -7,11 +7,11 @@ use ratatui::{
     widgets::{ Block, Borders, List, ListItem, ListState, Paragraph }
     };
 use tracing::{error, info};
-use crate::{AppMode, RsyncActiveInput, split_path, ssh_config::SshHost};
+use crate::{AppMode, RsyncActiveInput, RsyncStatus, split_path, ssh_config::SshHost};
 
 pub fn draw_ui(terminal: &mut Terminal<CrosstermBackend<Stdout>>, ssh_hosts: &Vec<SshHost>, selected_ssh_host: SshHost, mut list_state: &mut ListState,
     app_mode: &AppMode, rsync_active_input: &RsyncActiveInput, rsync_local_path: &mut String, mut rsycn_remote_path: &mut String,
-    is_fetching: bool, local_suggestions: &mut Vec<String>, remote_suggestions: &mut Vec<String>) {
+    is_fetching: bool, local_suggestions: &mut Vec<String>, remote_suggestions: &mut Vec<String>, sync_message: &String) {
     let terminal_draw_result = terminal.draw(|f| {
 
         match app_mode {
@@ -60,6 +60,7 @@ pub fn draw_ui(terminal: &mut Terminal<CrosstermBackend<Stdout>>, ssh_hosts: &Ve
                     .constraints([
                         Constraint::Length(3),
                         Constraint::Min(0),
+                        Constraint::Length(1),
                     ])
                     .split(f.area());
                 let horizontal_chunks = Layout::default()
@@ -139,6 +140,12 @@ pub fn draw_ui(terminal: &mut Terminal<CrosstermBackend<Stdout>>, ssh_hosts: &Ve
                     }
                 }
               
+                let rsync_status = Paragraph::new(sync_message.to_string())
+                    .block(Block::default()
+                    .borders(Borders::NONE));
+
+                f.render_widget(rsync_status, vertical_chunks[2]);
+
                 
             }
     }

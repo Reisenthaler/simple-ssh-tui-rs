@@ -1,13 +1,14 @@
 use std::fmt::format;
 use std::mem::transmute;
 use std::os::unix::process;
+use std::path::Path;
 use std::process::Stdio;
 use std::ptr::fn_addr_eq;
 use std::{ 
     process::Command,
     fs,
 };
-use std::io::Stdout;
+use std::io::{BufRead, BufReader, Stdout};
 use std::sync::mpsc;
 use std::{env, thread};
 use std::time::Duration;
@@ -47,6 +48,14 @@ enum RsyncActiveInput {
     Right
 }
 
+
+#[derive(Debug, PartialEq)]
+enum RsyncStatus {
+    Progress(String),
+    Completed(std::process::ExitStatus),
+    Failed(String),
+}
+
 fn main() -> Result<()> {
     beautiful_log::init_logging("INFO");
     
@@ -71,13 +80,18 @@ fn main() -> Result<()> {
     let mut is_fetching = false;
 
     let (tx, rx) = mpsc::channel::<Vec<String>>();
+
+    let (rsync_tx, rsync_rx) = mpsc::channel::<RsyncStatus>();
+    let mut is_syncing = false;
+    let mut sync_message = String::new();
+    sync_message = "no sync started".to_string();
     
     let mut terminal = setup_terminal(ssh_hosts.len())?;
        
     loop {
         draw_ui(&mut terminal, &ssh_hosts, selected_ssh_host.clone(), &mut list_state, 
             &app_mode, &rsync_active_input, &mut rsync_local_path,  &mut rsync_remote_path,
-            is_fetching, &mut local_suggestions, &mut remote_suggestions);
+            is_fetching, &mut local_suggestions, &mut remote_suggestions, &sync_message);
 
         if let Ok(all_folders) = rx.try_recv() {
             let (_, prefix) = split_path(&rsync_remote_path);
@@ -90,6 +104,22 @@ fn main() -> Result<()> {
             is_fetching = false;
         }
 
+        if let Ok(rsync_status) = rsync_rx.try_recv() {
+            match rsync_status {
+                RsyncStatus::Progress(progress_msg) => {
+                  sync_message = progress_msg;  
+                },
+                RsyncStatus::Completed(exit_status) => {
+                    sync_message = format!("rsync finished with status: {}", exit_status);
+                },
+                RsyncStatus::Failed(err_msg) => {
+                    sync_message = format!("rsync failed with error: {}", err_msg);
+                }
+            }
+
+            is_syncing = false;
+        }
+        
         if event::poll(Duration::from_millis(30))? {
        if let Event::Key(key) = event::read()? {
            match key.code {
@@ -224,7 +254,16 @@ fn main() -> Result<()> {
                    list_state.select(Some(i));
                },
                KeyCode::Enter => {
-                 break;
+                   if app_mode == AppMode::Rsync {
+                       if !is_syncing {
+                           is_syncing = true;
+                           sync_message = "Syncing...".to_string();
+
+                           run_rsync_process(selected_ssh_host.clone(), rsync_local_path.clone(), rsync_remote_path.clone(), rsync_tx.clone());
+                       }
+                   } else {
+                       break; 
+                   }
                },
                _ => {}
            }
@@ -265,6 +304,70 @@ fn start_ssh_process(ssh_host: SshHost) {
             
         }
 }
+
+fn run_rsync_process(ssh_host: SshHost, local_paht: String, remote_path: String, tx: mpsc::Sender<RsyncStatus>) {
+    thread::spawn(move || {
+        let destination = format!("{}:{}", ssh_host.host, remote_path);
+
+        let homebrew_rsync_path = "/opt/homebrew/bin/rsync";
+        let rsyc_binary = if Path::new(homebrew_rsync_path).exists() {
+            homebrew_rsync_path
+        } else {
+            "rsync"
+        };
+        
+        let mut child = Command::new(rsyc_binary)
+            .arg("-avz")
+            .arg("--no-perms")
+            .arg("--no-owner")
+            .arg("--no-group")
+            .arg("--info=progress2")
+            .arg(&local_paht)
+            .arg(&destination)
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn();
+
+        let mut child = match child {
+            Ok(c) => c,
+            Err(e) => {
+                let _ = tx.send(RsyncStatus::Failed(e.to_string()));
+                return;
+            }
+        };
+
+        if let Some(stdout) = child.stdout.take() {
+            let reader = BufReader::new(stdout);
+            for line in reader.lines().map_while(std::result::Result::ok)  {
+                let trimmed = line.trim();
+
+                if trimmed.contains('%') {
+                    let cleaned_progress = trimmed
+                        .split_whitespace()
+                        .collect::<Vec<&str>>()
+                        .join(" ");
+
+                    let _ = tx.send(RsyncStatus::Progress(cleaned_progress));
+                }
+                
+            }
+        }
+
+
+        match child.wait() {
+            Ok(status) if status.success() => {
+                let _ = tx.send(RsyncStatus::Completed(status));
+            },
+            _ => {
+                let _ = tx.send(RsyncStatus::Failed("Rsync failed with an error".to_string()));
+            }
+            
+            
+        }
+
+    });
+}
+
 
 
 fn setup_terminal(ssh_hosts_count: usize) -> std::result::Result<Terminal<CrosstermBackend<Stdout>>, std::io::Error> {
