@@ -1,4 +1,4 @@
-use std::{ thread, process::{ Command, Stdio }, sync::mpsc, path::Path, io::{ BufRead, BufReader, Stdout } };
+use std::{ fmt::format, io::{ BufRead, BufReader, Stdout }, path::Path, process::{ Command, Stdio }, sync::mpsc, thread };
 use tracing::{ info, error };
 use crossterm::{
     event::{ self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode }, 
@@ -19,7 +19,10 @@ pub fn start_ssh_process(ssh_host: SshHost) {
         info!("starting ssh");
 
         let mut child = Command::new("ssh");
-        child.arg(ssh_host.host);
+        child.args(ssh_base_args());
+        child.args([
+            &ssh_host.host
+        ]);
 
         child.stdin(Stdio::inherit())
             .stdout(Stdio::inherit())
@@ -46,8 +49,11 @@ pub fn run_rsync_process(ssh_host: SshHost, local_paht: String, remote_path: Str
         } else {
             "rsync"
         };
+
+        let ssh_rsh = format!("ssh {}", ssh_base_args().join(" "));
         
         let mut child = Command::new(rsyc_binary)
+            .env("RSYNC_RSH", ssh_rsh)
             .arg("-avz")
             .arg("--no-perms")
             .arg("--no-owner")
@@ -107,9 +113,8 @@ pub fn start_background_ssh(ssh_host: SshHost, ssh_host_count: usize, terminal: 
 
     // master connection exists
     let check = Command::new("ssh")
+        .args(ssh_base_args())
         .args([
-            "-o",
-            &format!("ControlPath={}", control_path),
             "-O",
             "check",
             &host,
@@ -124,6 +129,7 @@ pub fn start_background_ssh(ssh_host: SshHost, ssh_host_count: usize, terminal: 
 
     // try non-interactive login
     let non_interactive_login = Command::new("ssh")
+        .args(ssh_base_args())
         .args([
             "-o", "PasswordAuthentication=no",
             "-o", "KbdInteractiveAuthentication",
@@ -131,11 +137,6 @@ pub fn start_background_ssh(ssh_host: SshHost, ssh_host_count: usize, terminal: 
             "-o", "BatchMode=yes",
             "-o", "ConnectTimeout=10",
             "-o", "ExitOnForwardFailure=yes",
-            "-o", "ControlMaster=auto",
-            "-o",
-            &format!("ControlPath={}", control_path),
-            "-o",
-            "ControlPersist=15m",
             "-MNf",
             &host,
         ])
@@ -153,14 +154,9 @@ pub fn start_background_ssh(ssh_host: SshHost, ssh_host_count: usize, terminal: 
     
         // try interactiv login
         let status = Command::new("ssh")
+            .args(ssh_base_args())
             .args([
                 "-o", "ExitOnForwardFailure=yes",
-                "-o",
-                "ControlMaster=auto",
-                "-o",
-                &format!("ControlPath={}", control_path),
-                "-o",
-                "ControlPersist=15m",
                 "-MNf",
                 &host,
             ])
@@ -180,9 +176,8 @@ pub fn start_background_ssh(ssh_host: SshHost, ssh_host_count: usize, terminal: 
     }
     
     let verify = Command::new("ssh")
+        .args(ssh_base_args())
         .args([
-            "-o",
-            &format!("ControlPath={}", control_path),
             "-O",
             "check",
             &host,
@@ -195,4 +190,13 @@ pub fn start_background_ssh(ssh_host: SshHost, ssh_host_count: usize, terminal: 
         return Err("ssh master connection did not start".into());
     }
     Ok(())
+}
+
+
+fn ssh_base_args() -> Vec<&'static str> {
+    vec![
+        "-o", "ControlMaster=auto",
+        "-o", "ControlPath=/tmp/simple-ssh-tui-rs-%C",
+        "-o", "ControlPersist=90m" ,       
+    ]
 }
