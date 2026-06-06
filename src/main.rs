@@ -1,31 +1,7 @@
-use std::fmt::format;
-use std::mem::transmute;
-use std::os::unix::process;
-use std::path::Path;
-use std::process::{Child, Stdio};
-use std::ptr::fn_addr_eq;
-use std::{ 
-    process::Command,
-    fs,
-};
-use std::io::{BufRead, BufReader, Stdout};
-use std::sync::mpsc;
-use std::{env, thread};
 use std::time::Duration;
 
-use crossterm::cursor::SavePosition;
-use crossterm::event::KeyModifiers;
-use crossterm::{
-    event::{ self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode }, 
-    execute, 
-    terminal::{disable_raw_mode, enable_raw_mode}};
+use crossterm::event::{ self, Event };
 use beautiful_log;
-use tracing::{ error, info };
-use ratatui::{ 
-    Terminal, TerminalOptions, Viewport, 
-    backend::{ CrosstermBackend }, 
-    widgets::ListState
-    };
 
 mod actions;
 mod app;
@@ -35,13 +11,12 @@ mod ssh_operations;
 mod ui;
 mod terminal;
 use events::key_to_action;
-use ssh_config::{ parse_ssh_config };
 use ui::draw_ui;
 use ssh_operations::{ start_ssh_process,  run_rsync_process, start_background_ssh };
 use terminal::{ setup_terminal, restore_terminal_to_normal_mode };
 use crate::app::AppCommand;
 use crate::ssh_config::SshHost;
-use app::{ App, AppMode, RsyncStatus, RsyncActiveInput };
+use app::{ AppMode, RsyncStatus, RsyncActiveInput };
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
 

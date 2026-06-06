@@ -1,13 +1,13 @@
-use std::{fmt::format, io::Stdout};
+use std::io::Stdout;
 use ratatui::{ 
     Terminal, 
     backend::CrosstermBackend, 
     layout::{ Constraint, Direction, Layout, Position }, 
     style::{Modifier, Style }, 
-    widgets::{ Block, Borders, List, ListItem, ListState, Paragraph, Wrap }
+    widgets::{ Block, Borders, List, ListItem, Paragraph, Wrap }
     };
-use tracing::{error, info};
-use crate::{AppMode, RsyncActiveInput, RsyncStatus, split_path, ssh_config::SshHost};
+use tracing::error;
+use crate::{AppMode, RsyncActiveInput, split_path, ssh_config::SshHost};
 use crate::app::App;
 
 pub fn draw_ui(terminal: &mut Terminal<CrosstermBackend<Stdout>>, app: &mut App) {
@@ -164,7 +164,7 @@ pub fn draw_ui(terminal: &mut Terminal<CrosstermBackend<Stdout>>, app: &mut App)
     }
 }
 
-fn get_host_detail_list(ssh_host: &SshHost) -> Vec<ListItem> {
+fn get_host_detail_list(ssh_host: &SshHost) -> Vec<ListItem<'_>> {
     let mut host_details: Vec<ListItem> = Vec::new();
 
     host_details.push(ListItem::new(format!("Alias:     {}", ssh_host.host)));

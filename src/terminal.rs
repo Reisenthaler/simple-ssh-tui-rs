@@ -1,10 +1,9 @@
 use std::io::{Stdout, Write};
 use crossterm::{
-    cursor::MoveTo, event::{ self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode }, execute, terminal::{ Clear, ClearType, disable_raw_mode, enable_raw_mode }};
+    event::{ DisableMouseCapture, EnableMouseCapture }, execute, terminal::{ disable_raw_mode, enable_raw_mode }};
 use ratatui::{ 
     Terminal, TerminalOptions, Viewport, 
-    backend::CrosstermBackend, 
-    widgets::{ ListState  }
+    backend::CrosstermBackend
     };
 use crate::Result;
     

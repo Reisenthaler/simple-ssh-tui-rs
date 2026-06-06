@@ -1,15 +1,11 @@
-use std::{ fmt::format, io::{ BufRead, BufReader, Stdout }, path::Path, process::{ Command, Stdio }, sync::mpsc, thread };
+use std::{ io::{ BufRead, BufReader, Stdout }, path::Path, process::{ Command, Stdio }, sync::mpsc, thread };
 use tracing::{ info, error };
-use crossterm::{
-    event::{ self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode }, 
-    execute, 
-    terminal::{disable_raw_mode, enable_raw_mode}};
+use crossterm::terminal::{disable_raw_mode, enable_raw_mode};
 use ratatui::{ 
-    Terminal, TerminalOptions, Viewport, 
-    backend::{ CrosstermBackend }, 
-    widgets::ListState
+    Terminal, 
+    backend::{ CrosstermBackend }
     };
-use crate::terminal::{ setup_terminal, restore_terminal_to_normal_mode };
+use crate::terminal::restore_terminal_to_normal_mode;
 use crate::ssh_config::SshHost;
 use crate::RsyncStatus;
 
@@ -52,7 +48,7 @@ pub fn run_rsync_process(ssh_host: SshHost, local_paht: String, remote_path: Str
 
         let ssh_rsh = format!("ssh {}", ssh_base_args().join(" "));
         
-        let mut child = Command::new(rsyc_binary)
+        let child = Command::new(rsyc_binary)
             .env("RSYNC_RSH", ssh_rsh)
             .arg("-avz")
             .arg("--no-perms")
