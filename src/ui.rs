@@ -8,13 +8,12 @@ use ratatui::{
     };
 use tracing::{error, info};
 use crate::{AppMode, RsyncActiveInput, RsyncStatus, split_path, ssh_config::SshHost};
+use crate::app::App;
 
-pub fn draw_ui(terminal: &mut Terminal<CrosstermBackend<Stdout>>, ssh_hosts: &Vec<SshHost>, selected_ssh_host: SshHost, mut list_state: &mut ListState,
-    app_mode: &AppMode, rsync_active_input: &RsyncActiveInput, rsync_local_path: &mut String, mut rsycn_remote_path: &mut String,
-    is_fetching: bool, local_suggestions: &mut Vec<String>, remote_suggestions: &mut Vec<String>, sync_message: &String) {
+pub fn draw_ui(terminal: &mut Terminal<CrosstermBackend<Stdout>>, app: &mut App) {
     let terminal_draw_result = terminal.draw(|f| {
 
-        match app_mode {
+        match app.app_mode {
             AppMode::SelectHost => {
                 let chunks = Layout::default()
                     .direction(Direction::Vertical)
@@ -25,7 +24,7 @@ pub fn draw_ui(terminal: &mut Terminal<CrosstermBackend<Stdout>>, ssh_hosts: &Ve
                     .split(f.area());
         
         
-                let items: Vec<ListItem> = ssh_hosts
+                let items: Vec<ListItem> = app.ssh_hosts
                 .iter()
                 .map(|host| {
                     let display_text = match &host.host_name {
@@ -45,14 +44,14 @@ pub fn draw_ui(terminal: &mut Terminal<CrosstermBackend<Stdout>>, ssh_hosts: &Ve
                 )
                 .highlight_symbol("->");
         
-                let host_details: Vec<ListItem> = get_host_detail_list(&selected_ssh_host);
+                let host_details: Vec<ListItem> = get_host_detail_list(&app.selected_ssh_host);
                 
                 let ssh_host_details = List::new(host_details)
                     .block(Block::default().borders(Borders::TOP).title("------- SSH Details "));
         
                 
-                f.render_stateful_widget(list, chunks[0], &mut list_state);
-                f.render_stateful_widget(ssh_host_details, chunks[1], &mut list_state);
+                f.render_stateful_widget(list, chunks[0], &mut app.ssh_hosts_list_state);
+                f.render_stateful_widget(ssh_host_details, chunks[1], &mut app.ssh_hosts_list_state);
             }
             AppMode::Rsync => {
                 let vertical_chunks = Layout::default()
@@ -74,33 +73,33 @@ pub fn draw_ui(terminal: &mut Terminal<CrosstermBackend<Stdout>>, ssh_hosts: &Ve
                     ])
                     .split(vertical_chunks[0]);
 
-                  let local_path_input = Paragraph::new(format!("ssh host:    {} ", selected_ssh_host.host))
+                  let local_path_input = Paragraph::new(format!("ssh host:    {} ", app.selected_ssh_host.host))
                     .block(Block::default()
                     .borders(Borders::NONE));
 
                 f.render_widget(local_path_input, horizontal_chunks[0]);        
 
-                let local_path_input = Paragraph::new(format!("Local Path:  {} ",rsync_local_path.to_string()))
+                let local_path_input = Paragraph::new(format!("Local Path:  {} ", app.rsync_local_path.to_string()))
                     .block(Block::default()
                         .borders(Borders::NONE));
                 f.render_widget(local_path_input, horizontal_chunks[01]);
                 
              
-                let remote_path_input = Paragraph::new(format!("Remote Path: {} ",rsycn_remote_path.to_string()))
+                let remote_path_input = Paragraph::new(format!("Remote Path: {} ", app.rsync_remote_path.to_string()))
                     .block(Block::default()
                     .borders(Borders::NONE));
 
                 f.render_widget(remote_path_input, horizontal_chunks[2]);
 
 
-                let active_chunk = match rsync_active_input {
+                let active_chunk = match app.rsync_active_input {
                     RsyncActiveInput::Local => horizontal_chunks[1],
                     RsyncActiveInput::Remote => horizontal_chunks[2],
                 };
 
-                let current_input_path_text_len = match rsync_active_input {
-                    RsyncActiveInput::Local => rsync_local_path.len(),
-                    RsyncActiveInput::Remote => rsycn_remote_path.len(),
+                let current_input_path_text_len = match app.rsync_active_input {
+                    RsyncActiveInput::Local => app.rsync_local_path.len(),
+                    RsyncActiveInput::Remote => app.rsync_remote_path.len(),
                 };
 
                 f.set_cursor_position(Position::new(
@@ -108,36 +107,36 @@ pub fn draw_ui(terminal: &mut Terminal<CrosstermBackend<Stdout>>, ssh_hosts: &Ve
                     active_chunk.y
                 ));
 
-                match rsync_active_input {
+                match app.rsync_active_input {
                     RsyncActiveInput::Local => {
-                        if !local_suggestions.is_empty() {
-                            if local_suggestions.len() == 1 {
-                                let (parent_dir, _) = split_path(&rsync_local_path);
+                        if !app.local_suggestions.is_empty() {
+                            if app.local_suggestions.len() == 1 {
+                                let (parent_dir, _) = split_path(&app.rsync_local_path);
         
-                                *rsync_local_path = format!("{}{}", parent_dir, local_suggestions[0]);
+                                app.rsync_local_path = format!("{}{}", parent_dir, app.local_suggestions[0]);
         
-                                local_suggestions.clear();
+                                app.local_suggestions.clear();
                             }
                         }
                         
-                        let path_suggestions = Paragraph::new(format!("{}", local_suggestions.join(" ")))
+                        let path_suggestions = Paragraph::new(format!("{}", app.local_suggestions.join(" ")))
                             .block(Block::default()
                             .borders(Borders::ALL).title(" local "))
                             .wrap(Wrap { trim: true });
                         f.render_widget(path_suggestions, vertical_chunks[1]);     
                     },
                     RsyncActiveInput::Remote => {  
-                        if !remote_suggestions.is_empty() {
-                            if remote_suggestions.len() == 1 {
-                                let (parent_dir, _) = split_path(&rsycn_remote_path);
+                        if !app.remote_suggestions.is_empty() {
+                            if app.remote_suggestions.len() == 1 {
+                                let (parent_dir, _) = split_path(&app.rsync_remote_path);
         
-                                *rsycn_remote_path = format!("{}{}", parent_dir, remote_suggestions[0]);
+                                app.rsync_remote_path = format!("{}{}", parent_dir, app.remote_suggestions[0]);
         
-                                remote_suggestions.clear();
+                                app.remote_suggestions.clear();
                             }
                         }
                         
-                        let path_suggestions = Paragraph::new(format!("{}", remote_suggestions.join(" ")))
+                        let path_suggestions = Paragraph::new(format!("{}", app.remote_suggestions.join(" ")))
                             .block(Block::default()
                             .borders(Borders::ALL).title(" ssh host "))
                             .wrap(Wrap { trim: true });
@@ -145,7 +144,7 @@ pub fn draw_ui(terminal: &mut Terminal<CrosstermBackend<Stdout>>, ssh_hosts: &Ve
                     }
                 }
               
-                let rsync_status = Paragraph::new(sync_message.to_string())
+                let rsync_status = Paragraph::new(app.status_msg.to_string())
                     .block(Block::default()
                     .borders(Borders::NONE));
 

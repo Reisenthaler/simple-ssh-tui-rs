@@ -27,6 +27,7 @@ use ratatui::{
     widgets::ListState
     };
 
+mod app;
 mod ssh_config;
 mod ssh_operations;
 mod ui;
@@ -36,70 +37,28 @@ use ui::draw_ui;
 use ssh_operations::{ start_ssh_process,  run_rsync_process, start_background_ssh };
 use terminal::{ setup_terminal, restore_terminal_to_normal_mode };
 use crate::ssh_config::SshHost;
-
+use app::{ App, AppMode, RsyncStatus, RsyncActiveInput };
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
-#[derive(PartialEq)]
-enum AppMode {
-    SelectHost,
-    Rsync
-}
-
-#[derive(PartialEq)]
-enum RsyncActiveInput {
-    Local,
-    Remote
-}
-
-
-#[derive(Debug, PartialEq)]
-pub enum RsyncStatus {
-    Progress(String),
-    Completed(std::process::ExitStatus),
-    Failed(String),
-}
 
 fn main() -> Result<()> {
     beautiful_log::init_logging("INFO");
+
+    let mut app = app::init_app().unwrap();
     
-    let ssh_hosts = parse_ssh_config()?;
-    
-    let mut list_state = ListState::default();
-    list_state.select(Some(0));
-
-    let mut selected_ssh_host: SshHost = ssh_hosts[0].clone();
-
-    let mut app_mode = AppMode::SelectHost;
-    let mut rsync_active_input = RsyncActiveInput::Local;
-    // get current path
-    let mut rsync_local_path: String = env::current_dir()
-        .unwrap()
-        .to_string_lossy()
-        .into_owned();
-    let mut rsync_remote_path = "/".to_string();
-
-    let mut local_suggestions = Vec::<String>::new();
-    let mut remote_suggestions = Vec::<String>::new();
     let mut is_fetching = false;
 
-    let (tx, rx) = mpsc::channel::<Vec<String>>();
-
-    let (rsync_tx, rsync_rx) = mpsc::channel::<RsyncStatus>();
     let mut is_syncing = false;
-    let mut sync_message = String::new();
-    sync_message = "no sync started".to_string();
     
-    let mut terminal = setup_terminal(ssh_hosts.len())?;
+    let mut terminal = setup_terminal(app.ssh_hosts.len())?;
        
     loop {
-        draw_ui(&mut terminal, &ssh_hosts, selected_ssh_host.clone(), &mut list_state, 
-            &app_mode, &rsync_active_input, &mut rsync_local_path,  &mut rsync_remote_path,
-            is_fetching, &mut local_suggestions, &mut remote_suggestions, &sync_message);
+        draw_ui(&mut terminal, &mut app);
 
-        if let Ok(all_folders) = rx.try_recv() {
-            let (_, prefix) = split_path(&rsync_remote_path);
+        if let Ok(all_folders) = app.remote_autocomplet_rx.try_recv() {
+            let (_, prefix) = split_path(&app.rsync_remote_path);
             
-            remote_suggestions = all_folders
+            app.remote_suggestions = all_folders
                 .into_iter()
                 .filter(|folder| folder.to_lowercase().starts_with(&prefix.to_lowercase()))
                 .collect();
@@ -107,16 +66,16 @@ fn main() -> Result<()> {
             is_fetching = false;
         }
 
-        if let Ok(rsync_status) = rsync_rx.try_recv() {
+        if let Ok(rsync_status) = app.rsync_rx.try_recv() {
             match rsync_status {
                 RsyncStatus::Progress(progress_msg) => {
-                  sync_message = progress_msg;  
+                  app.status_msg = progress_msg;  
                 },
                 RsyncStatus::Completed(exit_status) => {
-                    sync_message = format!("rsync finished with status: {}", exit_status);
+                    app.status_msg = format!("rsync finished with status: {}", exit_status);
                 },
                 RsyncStatus::Failed(err_msg) => {
-                    sync_message = format!("rsync failed with error: {}", err_msg);
+                    app.status_msg = format!("rsync failed with error: {}", err_msg);
                 }
             }
 
@@ -131,35 +90,35 @@ fn main() -> Result<()> {
                        return Ok(())
                },
                KeyCode::Char('r') |  KeyCode::Char('R') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                        match app_mode {
+                        match app.app_mode {
                             AppMode::SelectHost => {
-                                app_mode = AppMode::Rsync;
-                                    start_background_ssh(selected_ssh_host.clone(), ssh_hosts.len(), &mut terminal);
+                                app.app_mode = AppMode::Rsync;
+                                    start_background_ssh(app.selected_ssh_host.clone(), app.ssh_hosts.len(), &mut terminal);
                             },
-                            AppMode::Rsync => app_mode = AppMode::SelectHost,
+                            AppMode::Rsync => app.app_mode = AppMode::SelectHost,
                         }
                },
                KeyCode::Char(c) => {
-                   if app_mode == AppMode::Rsync {
-                       match rsync_active_input {
-                           RsyncActiveInput::Local => rsync_local_path.push(c),
-                           RsyncActiveInput::Remote => rsync_remote_path.push(c),
+                   if app.app_mode == AppMode::Rsync {
+                       match app.rsync_active_input {
+                           RsyncActiveInput::Local => app.rsync_local_path.push(c),
+                           RsyncActiveInput::Remote => app.rsync_remote_path.push(c),
                        }
                    }  
                },
                KeyCode::Backspace => {
-                   if app_mode == AppMode::Rsync {
-                       match rsync_active_input {
-                           RsyncActiveInput::Local => rsync_local_path.pop(),
-                           RsyncActiveInput::Remote => rsync_remote_path.pop(),
+                   if app.app_mode == AppMode::Rsync {
+                       match app.rsync_active_input {
+                           RsyncActiveInput::Local => app.rsync_local_path.pop(),
+                           RsyncActiveInput::Remote => app.rsync_remote_path.pop(),
                        };
                    }   
                },
                KeyCode::Tab => {
-                 if app_mode == AppMode::Rsync && !is_fetching {
-                     match rsync_active_input {
+                 if app.app_mode == AppMode::Rsync && !is_fetching {
+                     match app.rsync_active_input {
                         RsyncActiveInput::Local => {
-                            let (parent_dir, prefix) = split_path(&rsync_local_path);
+                            let (parent_dir, prefix) = split_path(&app.rsync_local_path);
                             
                             let mut folder_list = Vec::new();
 
@@ -180,15 +139,15 @@ fn main() -> Result<()> {
                                 }
                             }
 
-                            local_suggestions = folder_list;
+                            app.local_suggestions = folder_list;
                             
                         },
                         RsyncActiveInput::Remote => {  
                              is_fetching = true;
 
-                            let tx_clone = tx.clone();
-                            let host = selected_ssh_host.host.clone();
-                            let path_to_search = rsync_remote_path.clone();
+                            let tx_clone = app.remote_autocomplet_tx.clone();
+                            let host = app.selected_ssh_host.host.clone();
+                            let path_to_search = app.rsync_remote_path.clone();
         
                             thread::spawn(move || {
         
@@ -222,11 +181,11 @@ fn main() -> Result<()> {
                },
                
                KeyCode::Down => {
-                   match app_mode {
+                   match app.app_mode {
                        AppMode::SelectHost => {
-                        let i = match list_state.selected() {
+                        let i = match app.ssh_hosts_list_state.selected() {
                             Some(i) => {
-                                if i >= ssh_hosts.len() - 1 {
+                                if i >= app.ssh_hosts.len() - 1 {
                                     0
                                 }
                                 else {
@@ -235,22 +194,22 @@ fn main() -> Result<()> {
                             },
                             None => 0
                         };
-                        list_state.select(Some(i));  
+                        app.ssh_hosts_list_state.select(Some(i));  
                        },
                        AppMode::Rsync => {
-                           rsync_active_input = RsyncActiveInput::Remote;
+                           app.rsync_active_input = RsyncActiveInput::Remote;
 
                        }
                    }
               
                },
                KeyCode::Up => {
-                   match app_mode {
+                   match app.app_mode {
                        AppMode::SelectHost => {
-                            let i = match list_state.selected() {
+                            let i = match app.ssh_hosts_list_state.selected() {
                             Some(i) => {
                                 if i == 0 {
-                                    ssh_hosts.len() - 1
+                                    app.ssh_hosts.len() - 1
                                 }
                                 else {
                                     i - 1
@@ -258,22 +217,22 @@ fn main() -> Result<()> {
                             },
                             None => 0
                         };
-                        list_state.select(Some(i));  
+                        app.ssh_hosts_list_state.select(Some(i));  
                        },
                        AppMode::Rsync => {
-                           rsync_active_input = RsyncActiveInput::Local;
+                           app.rsync_active_input = RsyncActiveInput::Local;
 
                        }
                    }
             
                },
                KeyCode::Enter => {
-                   if app_mode == AppMode::Rsync {
+                   if app.app_mode == AppMode::Rsync {
                        if !is_syncing {
                            is_syncing = true;
-                           sync_message = "Syncing...".to_string();
+                           app.status_msg = "start syncing...".to_string();
 
-                           run_rsync_process(selected_ssh_host.clone(), rsync_local_path.clone(), rsync_remote_path.clone(), rsync_tx.clone());
+                           run_rsync_process(app.selected_ssh_host.clone(), app.rsync_local_path.clone(), app.rsync_remote_path.clone(), app.rsync_tx.clone());
                        }
                    } else {
                        break; 
@@ -283,9 +242,9 @@ fn main() -> Result<()> {
            }
            
        } 
-       if let Some(index) = list_state.selected() {
-           if index < ssh_hosts.len() {
-               selected_ssh_host = ssh_hosts[index].clone()
+       if let Some(index) = app.ssh_hosts_list_state.selected() {
+           if index < app.ssh_hosts.len() {
+               app.selected_ssh_host = app.ssh_hosts[index].clone()
            }
        }  
     }
@@ -293,7 +252,7 @@ fn main() -> Result<()> {
 
     restore_terminal_to_normal_mode(&mut terminal)?;
     
-    start_ssh_process(selected_ssh_host);
+    start_ssh_process(app.selected_ssh_host);
     
     Ok(())
 }
