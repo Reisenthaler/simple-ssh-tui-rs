@@ -25,10 +25,6 @@ fn main() -> Result<()> {
 
     let mut app = app::init_app().unwrap();
     
-    let mut is_fetching = false;
-
-    let mut is_syncing = false;
-    
     let mut terminal = setup_terminal(app.ssh_hosts.len())?;
        
     loop {
@@ -41,8 +37,6 @@ fn main() -> Result<()> {
                 .into_iter()
                 .filter(|folder| folder.to_lowercase().starts_with(&prefix.to_lowercase()))
                 .collect();
-            
-            is_fetching = false;
         }
 
         if let Ok(rsync_status) = app.rsync_rx.try_recv() {
@@ -57,8 +51,6 @@ fn main() -> Result<()> {
                     app.status_msg = format!("rsync failed with error: {}", err_msg);
                 }
             }
-
-            is_syncing = false;
         }
         
         if event::poll(Duration::from_millis(30))? {
