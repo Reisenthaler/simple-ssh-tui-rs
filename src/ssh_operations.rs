@@ -197,6 +197,13 @@ fn ssh_base_args() -> Vec<&'static str> {
     vec![
         "-o", "ControlMaster=auto",
         "-o", "ControlPath=/tmp/simple-ssh-tui-rs-%C",
-        "-o", "ControlPersist=90m" ,       
+        "-o", "ControlPersist=90m",
+        "-o", "ConnectTimeout=15",
+        "-o", "ConnectionAttempts=2",
+        "-o", "ServerAliveInterval=30",
+        "-o", "ServerAliveCountMax=3",
+        "-o", "Compression=yes",
+        "-o", "IPQoS=throughput",
+        "-o", "StrictHostKeyChecking=accept-new",
     ]
 }
