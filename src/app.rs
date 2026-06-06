@@ -1,5 +1,5 @@
 use std::sync::mpsc::{Receiver, Sender};
-use std::{ env, sync::mpsc };
+use std::{ env, sync::mpsc, collections::VecDeque };
 use ratatui::{ widgets::ListState };
 use crate::SshHost;
 use crate::ssh_config::{ parse_ssh_config };
@@ -24,6 +24,14 @@ pub enum RsyncStatus {
     Completed(std::process::ExitStatus),
     Failed(String),
 }
+
+pub enum AppCommand {
+    Quit,
+    StartSsh,
+    StartRsync,
+    StartSshControlMaster(SshHost),
+}
+
 pub struct App {
     pub app_mode: AppMode,
     pub rsync_active_input: RsyncActiveInput,
@@ -39,6 +47,7 @@ pub struct App {
     pub remote_autocomplet_rx: Receiver<Vec<String>>,
     pub rsync_tx: Sender<RsyncStatus>,
     pub rsync_rx: Receiver<RsyncStatus>,
+    pub commands: VecDeque<AppCommand>,
 }
 
 
@@ -67,5 +76,6 @@ pub fn init_app() -> Result<App> {
         remote_autocomplet_rx: remote_autocomplet_rx,
         rsync_tx: rsync_tx,
         rsync_rx: rsync_rx,
+        commands: VecDeque::<AppCommand>::new(),
     })
 }

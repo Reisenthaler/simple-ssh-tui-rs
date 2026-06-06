@@ -107,8 +107,7 @@ pub fn run_rsync_process(ssh_host: SshHost, local_paht: String, remote_path: Str
 
 
 
-pub fn start_background_ssh(ssh_host: SshHost, ssh_host_count: usize, terminal: &mut Terminal<CrosstermBackend<Stdout>>) -> Result<()> {
-    let control_path = "/tmp/simple-ssh-tui-rs-%C";
+pub fn start_background_ssh(ssh_host: SshHost, terminal: &mut Terminal<CrosstermBackend<Stdout>>) -> Result<()> {
     let host = ssh_host.host.clone();
 
     // master connection exists
