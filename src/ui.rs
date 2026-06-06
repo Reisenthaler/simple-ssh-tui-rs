@@ -63,50 +63,53 @@ pub fn draw_ui(terminal: &mut Terminal<CrosstermBackend<Stdout>>, ssh_hosts: &Ve
                         Constraint::Length(1),
                     ])
                     .split(f.area());
+
+
                 let horizontal_chunks = Layout::default()
-                    .direction(Direction::Horizontal)
+                    .direction(Direction::Vertical)
                     .constraints([
-                        Constraint::Percentage(33),                        
-                        Constraint::Percentage(34),
-                        Constraint::Percentage(33),
+                        Constraint::Length(1),                        
+                        Constraint::Length(1),
+                        Constraint::Length(1),
                     ])
                     .split(vertical_chunks[0]);
 
-                let local_path_input = Paragraph::new(rsync_local_path.to_string())
+                  let local_path_input = Paragraph::new(format!("ssh host:    {} ", selected_ssh_host.host))
                     .block(Block::default()
-                        .borders(Borders::ALL).title(" Local Path "));
-                f.render_widget(local_path_input, horizontal_chunks[0]);
+                    .borders(Borders::NONE));
+
+                f.render_widget(local_path_input, horizontal_chunks[0]);        
+
+                let local_path_input = Paragraph::new(format!("Local Path:  {} ",rsync_local_path.to_string()))
+                    .block(Block::default()
+                        .borders(Borders::NONE));
+                f.render_widget(local_path_input, horizontal_chunks[01]);
                 
-                let local_path_input = Paragraph::new(format!(" {}", selected_ssh_host.host))
+             
+                let remote_path_input = Paragraph::new(format!("Remote Path: {} ",rsycn_remote_path.to_string()))
                     .block(Block::default()
-                    .borders(Borders::ALL).title(" ssh host "));
-
-                f.render_widget(local_path_input, horizontal_chunks[1]);        
-
-                let remote_path_input = Paragraph::new(rsycn_remote_path.to_string())
-                    .block(Block::default()
-                    .borders(Borders::ALL).title(" Remote Path "));
+                    .borders(Borders::NONE));
 
                 f.render_widget(remote_path_input, horizontal_chunks[2]);
 
 
                 let active_chunk = match rsync_active_input {
-                    RsyncActiveInput::Left => horizontal_chunks[0],
-                    RsyncActiveInput::Right => horizontal_chunks[2],
+                    RsyncActiveInput::Local => horizontal_chunks[1],
+                    RsyncActiveInput::Remote => horizontal_chunks[2],
                 };
 
                 let current_input_path_text_len = match rsync_active_input {
-                    RsyncActiveInput::Left => rsync_local_path.len(),
-                    RsyncActiveInput::Right => rsycn_remote_path.len(),
+                    RsyncActiveInput::Local => rsync_local_path.len(),
+                    RsyncActiveInput::Remote => rsycn_remote_path.len(),
                 };
 
                 f.set_cursor_position(Position::new(
-                    active_chunk.x + 1 + current_input_path_text_len as u16,
-                    active_chunk.y + 1
+                    active_chunk.x + 13 + current_input_path_text_len as u16,
+                    active_chunk.y
                 ));
 
                 match rsync_active_input {
-                    RsyncActiveInput::Left => {
+                    RsyncActiveInput::Local => {
                         if !local_suggestions.is_empty() {
                             if local_suggestions.len() == 1 {
                                 let (parent_dir, _) = split_path(&rsync_local_path);
@@ -123,7 +126,7 @@ pub fn draw_ui(terminal: &mut Terminal<CrosstermBackend<Stdout>>, ssh_hosts: &Ve
                             .wrap(Wrap { trim: true });
                         f.render_widget(path_suggestions, vertical_chunks[1]);     
                     },
-                    RsyncActiveInput::Right => {  
+                    RsyncActiveInput::Remote => {  
                         if !remote_suggestions.is_empty() {
                             if remote_suggestions.len() == 1 {
                                 let (parent_dir, _) = split_path(&rsycn_remote_path);

@@ -47,8 +47,8 @@ enum AppMode {
 
 #[derive(PartialEq)]
 enum RsyncActiveInput {
-    Left,
-    Right
+    Local,
+    Remote
 }
 
 
@@ -70,13 +70,13 @@ fn main() -> Result<()> {
     let mut selected_ssh_host: SshHost = ssh_hosts[0].clone();
 
     let mut app_mode = AppMode::SelectHost;
-    let mut rsync_active_input = RsyncActiveInput::Left;
+    let mut rsync_active_input = RsyncActiveInput::Local;
     // get current path
     let mut rsync_local_path: String = env::current_dir()
         .unwrap()
         .to_string_lossy()
         .into_owned();
-    let mut rsync_remote_path = String::new();
+    let mut rsync_remote_path = "/".to_string();
 
     let mut local_suggestions = Vec::<String>::new();
     let mut remote_suggestions = Vec::<String>::new();
@@ -139,36 +139,26 @@ fn main() -> Result<()> {
                             AppMode::Rsync => app_mode = AppMode::SelectHost,
                         }
                },
-               KeyCode::Left => {
-                   if app_mode == AppMode::Rsync {
-                       rsync_active_input = RsyncActiveInput::Left;
-                   }
-               },
-               KeyCode::Right => {
-                   if app_mode == AppMode::Rsync {
-                       rsync_active_input = RsyncActiveInput::Right;
-                   }
-               },
                KeyCode::Char(c) => {
                    if app_mode == AppMode::Rsync {
                        match rsync_active_input {
-                           RsyncActiveInput::Left => rsync_local_path.push(c),
-                           RsyncActiveInput::Right => rsync_remote_path.push(c),
+                           RsyncActiveInput::Local => rsync_local_path.push(c),
+                           RsyncActiveInput::Remote => rsync_remote_path.push(c),
                        }
                    }  
                },
                KeyCode::Backspace => {
                    if app_mode == AppMode::Rsync {
                        match rsync_active_input {
-                           RsyncActiveInput::Left => rsync_local_path.pop(),
-                           RsyncActiveInput::Right => rsync_remote_path.pop(),
+                           RsyncActiveInput::Local => rsync_local_path.pop(),
+                           RsyncActiveInput::Remote => rsync_remote_path.pop(),
                        };
                    }   
                },
                KeyCode::Tab => {
                  if app_mode == AppMode::Rsync && !is_fetching {
                      match rsync_active_input {
-                        RsyncActiveInput::Left => {
+                        RsyncActiveInput::Local => {
                             let (parent_dir, prefix) = split_path(&rsync_local_path);
                             
                             let mut folder_list = Vec::new();
@@ -193,7 +183,7 @@ fn main() -> Result<()> {
                             local_suggestions = folder_list;
                             
                         },
-                        RsyncActiveInput::Right => {  
+                        RsyncActiveInput::Remote => {  
                              is_fetching = true;
 
                             let tx_clone = tx.clone();
@@ -232,32 +222,50 @@ fn main() -> Result<()> {
                },
                
                KeyCode::Down => {
-                   let i = match list_state.selected() {
-                       Some(i) => {
-                           if i >= ssh_hosts.len() - 1 {
-                               0
-                           }
-                           else {
-                               i + 1
-                           }
+                   match app_mode {
+                       AppMode::SelectHost => {
+                        let i = match list_state.selected() {
+                            Some(i) => {
+                                if i >= ssh_hosts.len() - 1 {
+                                    0
+                                }
+                                else {
+                                    i + 1
+                                }
+                            },
+                            None => 0
+                        };
+                        list_state.select(Some(i));  
                        },
-                       None => 0
-                   };
-                   list_state.select(Some(i));
+                       AppMode::Rsync => {
+                           rsync_active_input = RsyncActiveInput::Remote;
+
+                       }
+                   }
+              
                },
                KeyCode::Up => {
-                   let i = match list_state.selected() {
-                       Some(i) => {
-                           if i == 0 {
-                               ssh_hosts.len() - 1
-                           }
-                           else {
-                               i - 1
-                           }
+                   match app_mode {
+                       AppMode::SelectHost => {
+                            let i = match list_state.selected() {
+                            Some(i) => {
+                                if i == 0 {
+                                    ssh_hosts.len() - 1
+                                }
+                                else {
+                                    i - 1
+                                }
+                            },
+                            None => 0
+                        };
+                        list_state.select(Some(i));  
                        },
-                       None => 0
-                   };
-                   list_state.select(Some(i));
+                       AppMode::Rsync => {
+                           rsync_active_input = RsyncActiveInput::Local;
+
+                       }
+                   }
+            
                },
                KeyCode::Enter => {
                    if app_mode == AppMode::Rsync {
