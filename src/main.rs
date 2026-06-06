@@ -2,7 +2,7 @@ use std::fmt::format;
 use std::mem::transmute;
 use std::os::unix::process;
 use std::path::Path;
-use std::process::Stdio;
+use std::process::{Child, Stdio};
 use std::ptr::fn_addr_eq;
 use std::{ 
     process::Command,
@@ -28,10 +28,13 @@ use ratatui::{
     };
 
 mod ssh_config;
+mod ssh_operations;
 mod ui;
+mod terminal;
 use ssh_config::{ parse_ssh_config };
 use ui::draw_ui;
-
+use ssh_operations::{ start_ssh_process,  run_rsync_process, start_background_ssh };
+use terminal::{ setup_terminal, restore_terminal_to_normal_mode };
 use crate::ssh_config::SshHost;
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
@@ -50,7 +53,7 @@ enum RsyncActiveInput {
 
 
 #[derive(Debug, PartialEq)]
-enum RsyncStatus {
+pub enum RsyncStatus {
     Progress(String),
     Completed(std::process::ExitStatus),
     Failed(String),
@@ -129,7 +132,10 @@ fn main() -> Result<()> {
                },
                KeyCode::Char('r') |  KeyCode::Char('R') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                         match app_mode {
-                            AppMode::SelectHost => app_mode = AppMode::Rsync,
+                            AppMode::SelectHost => {
+                                app_mode = AppMode::Rsync;
+                                    start_background_ssh(selected_ssh_host.clone(), ssh_hosts.len(), &mut terminal);
+                            },
                             AppMode::Rsync => app_mode = AppMode::SelectHost,
                         }
                },
@@ -202,7 +208,7 @@ fn main() -> Result<()> {
         
                                 let output = Command::new("ssh")
                                     .arg("-o").arg("ControlMaster=auto")
-                                    .arg("-o").arg("ControlPath=/tmp/tssh-%r@%h:%p")
+                                    .arg("-o").arg("ControlPath=/tmp/simple-ssh-tui-rs-%C")
                                     .arg("-o").arg("ControlPersist=5m")
                                     .arg(&host)
                                     .arg(format!("ls -p {}", parent_dir))
@@ -284,117 +290,9 @@ fn main() -> Result<()> {
     Ok(())
 }
 
-fn start_ssh_process(ssh_host: SshHost) {
-        info!("starting ssh");
-
-        let mut child = Command::new("ssh");
-        child.arg(ssh_host.host);
-
-        child.stdin(Stdio::inherit())
-            .stdout(Stdio::inherit())
-            .stderr(Stdio::inherit());
-
-        match child.spawn() {
-            Ok(mut process) => {
-                let _ = process.wait();
-            },
-            Err(e) => {
-                error!("starting ssh failed: {}", e);
-            }
-            
-        }
-}
-
-fn run_rsync_process(ssh_host: SshHost, local_paht: String, remote_path: String, tx: mpsc::Sender<RsyncStatus>) {
-    thread::spawn(move || {
-        let destination = format!("{}:{}", ssh_host.host, remote_path);
-
-        let homebrew_rsync_path = "/opt/homebrew/bin/rsync";
-        let rsyc_binary = if Path::new(homebrew_rsync_path).exists() {
-            homebrew_rsync_path
-        } else {
-            "rsync"
-        };
-        
-        let mut child = Command::new(rsyc_binary)
-            .arg("-avz")
-            .arg("--no-perms")
-            .arg("--no-owner")
-            .arg("--no-group")
-            .arg("--info=progress2")
-            .arg(&local_paht)
-            .arg(&destination)
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn();
-
-        let mut child = match child {
-            Ok(c) => c,
-            Err(e) => {
-                let _ = tx.send(RsyncStatus::Failed(e.to_string()));
-                return;
-            }
-        };
-
-        if let Some(stdout) = child.stdout.take() {
-            let reader = BufReader::new(stdout);
-            for line in reader.lines().map_while(std::result::Result::ok)  {
-                let trimmed = line.trim();
-
-                if trimmed.contains('%') {
-                    let cleaned_progress = trimmed
-                        .split_whitespace()
-                        .collect::<Vec<&str>>()
-                        .join(" ");
-
-                    let _ = tx.send(RsyncStatus::Progress(cleaned_progress));
-                }
-                
-            }
-        }
-
-
-        match child.wait() {
-            Ok(status) if status.success() => {
-                let _ = tx.send(RsyncStatus::Completed(status));
-            },
-            _ => {
-                let _ = tx.send(RsyncStatus::Failed("Rsync failed with an error".to_string()));
-            }
-            
-            
-        }
-
-    });
-}
 
 
 
-fn setup_terminal(ssh_hosts_count: usize) -> std::result::Result<Terminal<CrosstermBackend<Stdout>>, std::io::Error> {
-    
-    enable_raw_mode()?;
-    let mut stdout = std::io::stdout();
-    
-       execute!(stdout, EnableMouseCapture)?;
-
-       let backend = CrosstermBackend::new(stdout);
-
-       let terminal = Terminal::with_options(backend, 
-           TerminalOptions {
-               viewport: Viewport::Inline((ssh_hosts_count + 8).try_into().unwrap()),
-       });
-
-       return terminal;
-}
-
-fn restore_terminal_to_normal_mode(terminal: &mut Terminal<CrosstermBackend<Stdout>>) -> Result<()>{
-    terminal.clear()?;
-    disable_raw_mode()?;
-    execute!(terminal.backend_mut(), DisableMouseCapture)?;
-    terminal.show_cursor()?;   
-
-    Ok(())
-}
 
 fn split_path(input: &str) -> (String, String) {
     if let Some(index) = input.rfind('/') {
