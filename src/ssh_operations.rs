@@ -143,7 +143,7 @@ pub fn start_background_ssh(ssh_host: SshHost, terminal: &mut Terminal<Crossterm
 
     if !non_interactive_login {
         disable_raw_mode()?;
-        restore_terminal_to_normal_mode(terminal);
+        restore_terminal_to_normal_mode(terminal)?;
         println!("Please complete SSH login in the terminal");
    
     
