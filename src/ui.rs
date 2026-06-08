@@ -51,7 +51,7 @@ pub fn draw_ui(terminal: &mut Terminal<CrosstermBackend<Stdout>>, app: &mut App)
         
                 
                 f.render_stateful_widget(list, chunks[0], &mut app.ssh_hosts_list_state);
-                f.render_stateful_widget(ssh_host_details, chunks[1], &mut app.ssh_hosts_list_state);
+                f.render_widget(ssh_host_details, chunks[1]);
             }
             AppMode::Rsync => {
                 let vertical_chunks = Layout::default()
