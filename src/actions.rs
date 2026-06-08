@@ -1,5 +1,5 @@
 use std::{ process::Command, thread, fs };
-use crate::app::{App, AppCommand::{self, Quit, StartRsync, StartSsh}, AppMode, RsyncActiveInput};
+use crate::{app::{App, AppCommand::{self, Quit, StartRsync, StartSsh}, AppMode, RsyncActiveInput}, ssh_operations};
 
 pub enum Action {
     Quit,
@@ -36,6 +36,7 @@ fn handle_toggle_app_mode(app: &mut App) {
             app.commands.push_front(AppCommand::StartSshControlMaster(app.selected_ssh_host.clone()));
         },
         AppMode::Rsync => app.app_mode = AppMode::SelectHost,
+        AppMode::SshPasswordPromt => {},
     }
 }
 
@@ -46,6 +47,26 @@ fn handle_enter(app: &mut App) {
         },
         AppMode::Rsync => {
             app.commands.push_back(StartRsync);
+        },
+        AppMode::SshPasswordPromt => {
+            let ssh_input_tx = &app.ssh_portable_pty_input_tx;
+            match ssh_input_tx.send(crate::app::PtyInput::Bytes(format!("{}\n", app.ssh_login_input).into_bytes())) {
+                Ok(_) => {
+                    app.ssh_login_input = "".to_string();
+
+                    std::thread::sleep(std::time::Duration::from_millis(500));
+                    if ssh_operations::check_control_master(&app.selected_ssh_host) {
+                        app.app_mode = AppMode::Rsync;
+                    } else {
+                        app.status_msg = "failed to establisch control master".to_string();
+                        app.app_mode = AppMode::SelectHost;
+                    } 
+                },
+                Err(e) => {
+                    app.status_msg = format!("error while sending user input to portable_pty: {}", e.to_string());
+                }
+            }
+            
         },
     }
 }
@@ -69,8 +90,8 @@ fn handle_move_up(app: &mut App) {
         },
         AppMode::Rsync => {
             app.rsync_active_input = RsyncActiveInput::Local;
-
-        }
+        },
+        AppMode::SshPasswordPromt => {},
     }
 }
 
@@ -94,7 +115,8 @@ fn handle_move_down(app: &mut App) {
         AppMode::Rsync => {
             app.rsync_active_input = RsyncActiveInput::Remote;
 
-        }
+        },
+        AppMode::SshPasswordPromt => {},
     }
 }
 
@@ -108,20 +130,30 @@ fn set_selected_host(app: &mut App) {
 }
 
 fn handle_input(app: &mut App, c: char) {
-    if app.app_mode == AppMode::Rsync {
-        match app.rsync_active_input {
-            RsyncActiveInput::Local => app.rsync_local_path.push(c),
-            RsyncActiveInput::Remote => app.rsync_remote_path.push(c),
-        }
+   match app.app_mode {
+       AppMode::SelectHost => {},
+       AppMode::Rsync => {
+            match app.rsync_active_input {
+                RsyncActiveInput::Local => app.rsync_local_path.push(c),
+                RsyncActiveInput::Remote => app.rsync_remote_path.push(c),
+            }
+       },
+       AppMode::SshPasswordPromt => {
+           app.ssh_login_input.push_str(&c.to_string());
+       },
     }
 }
 
 fn handle_backspace(app: &mut App) {
-    if app.app_mode == AppMode::Rsync {
-        match app.rsync_active_input {
-            RsyncActiveInput::Local => { app.rsync_local_path.pop(); },
-            RsyncActiveInput::Remote =>{ app.rsync_remote_path.pop(); },
-        }
+    match app.app_mode {
+        AppMode::SelectHost => {},
+        AppMode::Rsync => {
+            match app.rsync_active_input {
+                RsyncActiveInput::Local => { app.rsync_local_path.pop(); },
+                RsyncActiveInput::Remote =>{ app.rsync_remote_path.pop(); },
+            }
+        },
+        AppMode::SshPasswordPromt => { app.ssh_login_input.pop(); }
     }
 }
 
@@ -154,35 +186,10 @@ fn handle_tab(app: &mut App) {
             },
             RsyncActiveInput::Remote => { 
                 let tx_clone = app.remote_autocomplet_tx.clone();
-                let host = app.selected_ssh_host.host.clone();
+                let ssh_host = app.selected_ssh_host.clone();
                 let path_to_search = app.rsync_remote_path.clone();
 
-                thread::spawn(move || {
-        
-                    let (parent_dir, _) = split_path(&path_to_search);
-                    
-                    let mut folder_list = Vec::new();
-        
-                    let output = Command::new("ssh")
-                        .arg("-o").arg("ControlMaster=auto")
-                        .arg("-o").arg("ControlPath=/tmp/simple-ssh-tui-rs-%C")
-                        .arg("-o").arg("ControlPersist=5m")
-                        .arg(&host)
-                        .arg(format!("ls -p {}", parent_dir))
-                        .output();
-        
-                    if let Ok(out) = output {
-                        if out.status.success() {
-                            let stdout_str = String::from_utf8_lossy(&out.stdout);
-                            folder_list = stdout_str.lines()
-                                .filter(|line| line.ends_with('/'))
-                                    .map(|line| line.to_string())
-                                    .collect();
-                        }
-                    }
-        
-                    let _ = tx_clone.send(folder_list);
-                });
+                ssh_operations::run_ls_over_ssh(ssh_host, path_to_search, tx_clone);
             }  
         }
     }   

@@ -1,13 +1,15 @@
-use std::{ io::{ BufRead, BufReader, Stdout }, path::Path, process::{ Command, Stdio }, sync::mpsc, thread };
+use std::{ f32::consts::E, io::{ BufRead, BufReader, Stdout }, fs, path::{Path, PathBuf}, process::{ Command, Stdio }, sync::mpsc::{self, Receiver, Sender}, thread };
 use tracing::{ info, error };
 use crossterm::terminal::{disable_raw_mode, enable_raw_mode};
 use ratatui::{ 
     Terminal, 
     backend::{ CrosstermBackend }
     };
+use portable_pty::{CommandBuilder, PtySize, native_pty_system, PtySystem};
 use crate::terminal::restore_terminal_to_normal_mode;
 use crate::ssh_config::SshHost;
 use crate::RsyncStatus;
+use crate::app::{ App, PtyInput, SshEstablishControlMaster };
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
@@ -15,7 +17,7 @@ pub fn start_ssh_process(ssh_host: SshHost) {
         info!("starting ssh");
 
         let mut child = Command::new("ssh");
-        child.args(ssh_base_args());
+        child.args(ssh_base_args(&ssh_host));
         child.args([
             &ssh_host.host
         ]);
@@ -46,7 +48,7 @@ pub fn run_rsync_process(ssh_host: SshHost, local_paht: String, remote_path: Str
             "rsync"
         };
 
-        let ssh_rsh = format!("ssh {}", ssh_base_args().join(" "));
+        let ssh_rsh = format!("ssh {}", ssh_base_args(&ssh_host).join(" "));
         
         let child = Command::new(rsyc_binary)
             .env("RSYNC_RSH", ssh_rsh)
@@ -101,104 +103,184 @@ pub fn run_rsync_process(ssh_host: SshHost, local_paht: String, remote_path: Str
     });
 }
 
+pub fn run_ls_over_ssh(ssh_host: SshHost, path_to_search: String, tx:  Sender<Vec<String>>) {
+    thread::spawn(move || {
+        let (parent_dir, _) = split_path(&path_to_search);
+        
+        let mut folder_list = Vec::new();
 
+        let output = Command::new("ssh")
+            .args(ssh_base_args(&ssh_host))
+            .arg(&ssh_host.host)
+            .arg(format!("ls -p {}", parent_dir))
+            .output();
 
-pub fn start_background_ssh(ssh_host: SshHost, terminal: &mut Terminal<CrosstermBackend<Stdout>>) -> Result<()> {
-    let host = ssh_host.host.clone();
-
-    // master connection exists
-    let check = Command::new("ssh")
-        .args(ssh_base_args())
-        .args([
-            "-O",
-            "check",
-            &host,
-        ])
-        .stderr(Stdio::null())
-        .stdout(Stdio::null())
-        .status();
-
-    if matches!(check, Ok(status) if status.success()) {
-        return Ok(());
-    }
-
-    // try non-interactive login
-    let non_interactive_login = Command::new("ssh")
-        .args(ssh_base_args())
-        .args([
-            "-o", "PasswordAuthentication=no",
-            "-o", "KbdInteractiveAuthentication",
-            "-o", "ChallengeResponseAuthentication",
-            "-o", "BatchMode=yes",
-            "-o", "ConnectTimeout=10",
-            "-o", "ExitOnForwardFailure=yes",
-            "-MNf",
-            &host,
-        ])
-        .stderr(Stdio::null())
-        .stdout(Stdio::null())
-        .status()
-        .map(|s| s.success())
-        .unwrap_or(false);
-
-    if !non_interactive_login {
-        disable_raw_mode()?;
-        restore_terminal_to_normal_mode(terminal)?;
-        println!("Please complete SSH login in the terminal");
-   
-    
-        // try interactiv login
-        let status = Command::new("ssh")
-            .args(ssh_base_args())
-            .args([
-                "-o", "ExitOnForwardFailure=yes",
-                "-MNf",
-                &host,
-            ])
-            .stdin(Stdio::inherit())
-            .stdout(Stdio::null())
-            .stderr(Stdio::inherit())
-            .status();
-
-        let _ = enable_raw_mode()?;
-   
-    
-        let status = status?;
-
-        if !status.success() {
-            return Err("failed to start ssh master connection".into());
+        if let Ok(out) = output {
+            if out.status.success() {
+                let stdout_str = String::from_utf8_lossy(&out.stdout);
+                folder_list = stdout_str.lines()
+                    .filter(|line| line.ends_with('/'))
+                        .map(|line| line.to_string())
+                        .collect();
+            }
         }
-    }
-    
-    let verify = Command::new("ssh")
-        .args(ssh_base_args())
-        .args([
-            "-O",
-            "check",
-            &host,
-        ])
-        .stderr(Stdio::null())
-        .stdout(Stdio::null())
-        .status()?;
 
-    if !verify.success() {
-        return Err("ssh master connection did not start".into());
-    }
-    Ok(())
+        let _ = tx.send(folder_list);
+    });
 }
 
+fn split_path(input: &str) -> (String, String) {
+    if let Some(index) = input.rfind('/') {
+        let parent_dir = &input[..=index];
+        let prefix = &input[index + 1..];
 
-fn ssh_base_args() -> Vec<&'static str> {
+        let parent_dir = if parent_dir.is_empty() { "/".to_string() } else {
+            parent_dir.to_string()
+        };
+        (parent_dir, prefix.to_string())
+    } else {
+        ("./".to_string(), input.to_string())
+    }
+}
+
+pub fn start_background_ssh(ssh_host: SshHost) -> (Sender<PtyInput>, Receiver<SshEstablishControlMaster>) {
+    let host = ssh_host.host.clone();
+    let (ssh_portable_pty_output_tx, ssh_portable_pty_output_rx) = mpsc::channel::<SshEstablishControlMaster>();
+    let (ssh_portable_pty_input_tx, ssh_portable_pty_input_rx) = mpsc::channel::<PtyInput>();
+
+    if check_control_master(&ssh_host) {
+        ssh_portable_pty_output_tx.send(SshEstablishControlMaster::Succsess);
+        return (ssh_portable_pty_input_tx, ssh_portable_pty_output_rx);
+    } else {
+        remove_control_master(&ssh_host);
+    }
+    
+    thread::spawn(move || {
+        let pty_system = native_pty_system();
+        let mut pair = match pty_system.openpty(PtySize {
+            rows: 24, 
+            cols: 80, 
+            pixel_width: 0, 
+            pixel_height: 0
+        })
+        {
+            Ok(p) => p,
+            Err(e) => { 
+                error!("error creating portable_pty");
+                return;
+            },
+        };
+    
+        let mut ssh_args = ssh_base_args(&ssh_host);
+        ssh_args.extend([
+            "-o".to_string(), "ExitOnForwardFailure=yes".to_string(),
+            "-MN".to_string(),
+            host,
+        ]);
+        
+        let mut cmd = CommandBuilder::new("ssh");
+        cmd.args(ssh_args);
+        
+        let child = pair.slave.spawn_command(cmd);
+    
+        let mut reader =  match pair.master.try_clone_reader() {
+            Ok(p) => p,
+            Err(e) => { 
+                error!("error getting reader from portable_pty");
+                return;
+            },
+        };
+
+        thread::spawn(move || {
+            loop {
+                let mut buf = [0u8; 4096];
+                match reader.read(&mut buf) {
+                    Ok(0) => {
+                        break;
+                    },
+                    Ok(n) => {
+                        let text: String = String::from_utf8_lossy(&buf[..n]).to_string();
+                        ssh_portable_pty_output_tx.send(SshEstablishControlMaster::PasswordPromt(text));
+                    },
+                    Err(e) => {
+                        break;
+                    }
+                } 
+            }  
+        });
+
+        let mut writer = match pair.master.take_writer() {
+            Ok(writ) => writ,
+            Err(e) => { 
+                error!("error getting reader from portable_pty");
+                return;
+            },
+        };
+
+        while let Ok(msg) = ssh_portable_pty_input_rx.recv() {
+            match msg {
+                PtyInput::Bytes(data) => {
+                    let _ = writer.write_all(&data);
+                    let _ = writer.flush();
+                },
+                PtyInput::Resize(_, _) => {
+                    
+                },
+            }
+        }
+    
+    });
+
+    (ssh_portable_pty_input_tx, ssh_portable_pty_output_rx)
+}
+
+pub fn check_control_master(ssh_host: &SshHost) -> bool {
+    let control_path = control_path(&ssh_host);
+    if !control_path.exists() {
+        return false;
+    }
+
+    let output = Command::new("ssh")
+        .args([
+            "-o", &format!("ControlPath={}", control_path.display()),
+            "-O", "check",
+            &ssh_host.host,
+        ])
+        .output();
+
+    match output {
+        Ok(output) => {
+            output.status.success()
+        },
+        Err(_) => false
+    }
+}
+
+fn remove_control_master(ssh_host: &SshHost) {
+    let control_path = control_path(&ssh_host);
+
+    fs::remove_file(&control_path);
+}
+
+fn ssh_base_args(ssh_host: &SshHost) -> Vec<String> {
+
+    let control_master = control_path(&ssh_host.clone()).to_string_lossy().to_string();
     vec![
-        "-o", "ControlMaster=auto",
-        "-o", "ControlPath=/tmp/simple-ssh-tui-rs-%C",
-        "-o", "ControlPersist=90m",
-        "-o", "ConnectTimeout=15",
-        "-o", "ConnectionAttempts=2",
-        "-o", "ServerAliveInterval=30",
-        "-o", "ServerAliveCountMax=3",
-        "-o", "Compression=yes",
-        "-o", "IPQoS=throughput",
-        "-o", "StrictHostKeyChecking=accept-new",
+        "-o".to_string(), "ControlMaster=auto".to_string(),
+        "-o".to_string(), format!("ControlPath={}", control_master),
+        "-o".to_string(), "ControlPersist=90m".to_string(),
+        "-o".to_string(), "ConnectTimeout=15".to_string(),
+        "-o".to_string(), "ConnectionAttempts=2".to_string(),
+        "-o".to_string(), "ServerAliveInterval=30".to_string(),
+        "-o".to_string(), "ServerAliveCountMax=3".to_string(),
+        "-o".to_string(), "Compression=yes".to_string(),
+        "-o".to_string(), "IPQoS=throughput".to_string(),
+        "-o".to_string(), "StrictHostKeyChecking=accept-new".to_string(),
     ]
+}
+
+fn control_path(ssh_host: &SshHost) -> PathBuf {
+    let host = &ssh_host.host;
+
+    PathBuf::from(format!("/tmp/simple-ssh-tui-rs-{}", host.replace(":", "-")))
 }

@@ -151,7 +151,44 @@ pub fn draw_ui(terminal: &mut Terminal<CrosstermBackend<Stdout>>, app: &mut App)
                 f.render_widget(rsync_status, vertical_chunks[2]);
 
                 
-            }
+            },
+            AppMode::SshPasswordPromt => {        
+                let vertical_chunks = Layout::default()
+                .direction(Direction::Vertical)
+                .constraints([
+                    Constraint::Length(2),
+                    Constraint::Min(0),
+                    Constraint::Length(2),
+                    Constraint::Length(1),
+                ])
+                .split(f.area());
+                
+                let title_paragraph = Paragraph::new(app.selected_ssh_host.host.clone())
+                    .block(Block::default()
+                    .borders(Borders::NONE));
+    
+                f.render_widget(title_paragraph, vertical_chunks[0]);
+
+                let ssh_output_paragraph = Paragraph::new(app.ssh_login_output.clone())
+                    .block(Block::default()
+                    .borders(Borders::TOP)
+                    .title("--- ssh output"));
+    
+                f.render_widget(ssh_output_paragraph, vertical_chunks[1]);
+
+                let ssh_input_paragraph = Paragraph::new(app.ssh_login_input.clone())
+                    .block(Block::default()
+                    .borders(Borders::TOP)
+                    .title("--- your input (press ENTER to send)"));
+    
+                f.render_widget(ssh_input_paragraph, vertical_chunks[2]);
+                
+                let status_msg_paragraph = Paragraph::new(app.status_msg.to_string())
+                    .block(Block::default()
+                    .borders(Borders::NONE));
+    
+                f.render_widget(status_msg_paragraph, vertical_chunks[3]);
+            },
     }
     });
 

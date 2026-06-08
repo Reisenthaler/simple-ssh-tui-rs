@@ -14,9 +14,9 @@ use events::key_to_action;
 use ui::draw_ui;
 use ssh_operations::{ start_ssh_process,  run_rsync_process, start_background_ssh };
 use terminal::{ setup_terminal, restore_terminal_to_normal_mode };
-use crate::app::AppCommand;
+use crate::app::{AppCommand, AppMode::Rsync};
 use crate::ssh_config::SshHost;
-use app::{ AppMode, RsyncStatus, RsyncActiveInput };
+use app::{ AppMode, RsyncStatus, RsyncActiveInput, SshEstablishControlMaster };
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
 
@@ -52,6 +52,20 @@ fn main() -> Result<()> {
                 }
             }
         }
+
+        if let Ok(ssh_login_output) = app.ssh_portable_pty_output_rx.try_recv() {
+            match ssh_login_output {
+            SshEstablishControlMaster::Succsess => {
+                app.app_mode = AppMode::Rsync;
+            },
+            SshEstablishControlMaster::Failure => {
+                app.app_mode = AppMode::SelectHost;
+            },
+            SshEstablishControlMaster::PasswordPromt(text) => {
+                app.ssh_login_output.push_str(&text);
+            }
+        }
+        } 
         
         if event::poll(Duration::from_millis(30))? {
             if let Event::Key(key) = event::read()? {
@@ -76,7 +90,10 @@ fn main() -> Result<()> {
                     run_rsync_process(app.selected_ssh_host.clone(), app.rsync_local_path.clone(), app.rsync_remote_path.clone(), app.rsync_tx.clone());
                 },
                 AppCommand::StartSshControlMaster(ssh_host) => {
-                    start_background_ssh(ssh_host.clone(), &mut terminal);
+                    app.app_mode = AppMode::SshPasswordPromt;
+                   let (ssh_portable_pty_input_tx, ssh_portable_pty_output_rx) = start_background_ssh(ssh_host.clone());
+                   app.ssh_portable_pty_input_tx = ssh_portable_pty_input_tx;
+                   app.ssh_portable_pty_output_rx = ssh_portable_pty_output_rx;
                 }
             }
             

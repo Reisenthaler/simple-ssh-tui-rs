@@ -1,5 +1,5 @@
 use std::sync::mpsc::{Receiver, Sender};
-use std::{ env, sync::mpsc, collections::VecDeque };
+use std::{ env, sync::{ mpsc, Arc, Mutex }, collections::VecDeque };
 use ratatui::{ widgets::ListState };
 use crate::SshHost;
 use crate::ssh_config::{ parse_ssh_config };
@@ -8,7 +8,8 @@ use crate::Result;
 #[derive(PartialEq)]
 pub enum AppMode {
     SelectHost,
-    Rsync
+    Rsync,
+    SshPasswordPromt,
 }
 
 #[derive(PartialEq)]
@@ -32,6 +33,17 @@ pub enum AppCommand {
     StartSshControlMaster(SshHost),
 }
 
+pub enum PtyInput {
+    Bytes(Vec<u8>),
+    Resize(u16, u16),
+}
+
+pub enum SshEstablishControlMaster {
+    PasswordPromt(String),
+    Succsess,
+    Failure,
+}
+
 pub struct App {
     pub app_mode: AppMode,
     pub rsync_active_input: RsyncActiveInput,
@@ -48,6 +60,13 @@ pub struct App {
     pub rsync_tx: Sender<RsyncStatus>,
     pub rsync_rx: Receiver<RsyncStatus>,
     pub commands: VecDeque<AppCommand>,
+    pub ssh_portable_pty_output_tx: Sender<SshEstablishControlMaster>,
+    pub ssh_portable_pty_output_rx: Receiver<SshEstablishControlMaster>,
+    pub ssh_portable_pty_input_tx: Sender<PtyInput>,
+    pub ssh_portable_pty_input_rx: Receiver<PtyInput>,
+    pub ssh_login_output: String,
+    pub ssh_login_input: String,
+    
 }
 
 
@@ -60,6 +79,8 @@ pub fn init_app() -> Result<App> {
 
     let (remote_autocomplet_tx, remote_autocomplet_rx) = mpsc::channel::<Vec<String>>();
     let (rsync_tx, rsync_rx) = mpsc::channel::<RsyncStatus>();
+    let (ssh_portable_pty_output_tx, ssh_portable_pty_output_rx) = mpsc::channel::<SshEstablishControlMaster>();
+    let (ssh_portable_pty_input_tx, ssh_portable_pty_input_rx) = mpsc::channel::<PtyInput>();
 
     Ok(App {
         app_mode: AppMode::SelectHost,
@@ -77,5 +98,11 @@ pub fn init_app() -> Result<App> {
         rsync_tx: rsync_tx,
         rsync_rx: rsync_rx,
         commands: VecDeque::<AppCommand>::new(),
+        ssh_portable_pty_output_tx: ssh_portable_pty_output_tx,
+        ssh_portable_pty_output_rx: ssh_portable_pty_output_rx,
+        ssh_portable_pty_input_tx: ssh_portable_pty_input_tx,
+        ssh_portable_pty_input_rx: ssh_portable_pty_input_rx,
+        ssh_login_output: "".to_string(),
+        ssh_login_input: "".to_string(),
     })
 }
