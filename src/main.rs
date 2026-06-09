@@ -12,7 +12,7 @@ mod ui;
 mod terminal;
 use events::key_to_action;
 use ui::draw_ui;
-use ssh_operations::{ start_ssh_process,  run_rsync_process, start_background_ssh };
+use ssh_operations::{ start_ssh_process };
 use terminal::{ setup_terminal, restore_terminal_to_normal_mode };
 use ratatui::{ Terminal, backend::CrosstermBackend };
 use crate::app::{ AppCommand };
@@ -57,18 +57,8 @@ fn process_app_commands(app: &mut App, mut terminal: &mut Terminal<CrosstermBack
                     
                     start_ssh_process(app.selected_ssh_host.clone());
                     return Ok(());
-                }
-                AppCommand::StartRsync => {
-                    run_rsync_process(app.selected_ssh_host.clone(), app.rsync_local_path.clone(), app.rsync_remote_path.clone(), app.rsync_tx.clone());
                 },
-                AppCommand::StartSshControlMaster(ssh_host) => {
-                    app.app_mode = AppMode::SshPasswordPromt;
-                    let (ssh_portable_pty_input_tx, ssh_portable_pty_output_rx) = start_background_ssh(ssh_host.clone());
-                    app.ssh_portable_pty_input_tx = ssh_portable_pty_input_tx;
-                    app.ssh_portable_pty_output_rx = ssh_portable_pty_output_rx;
-                }
             }
-            
         }
         
         Ok(())

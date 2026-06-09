@@ -1,5 +1,5 @@
 use std::{ fs };
-use crate::{app::{App, AppCommand::{self, Quit, StartRsync, StartSsh}, AppMode, RsyncActiveInput}, ssh_operations};
+use crate::{app::{App, AppCommand::{self, Quit, StartSsh}, AppMode, RsyncActiveInput}, ssh_operations};
 
 pub enum Action {
     Quit,
@@ -33,7 +33,10 @@ fn handle_toggle_app_mode(app: &mut App) {
     match app.app_mode {
         AppMode::SelectHost => {
             app.app_mode = AppMode::Rsync;
-            app.commands.push_front(AppCommand::StartSshControlMaster(app.selected_ssh_host.clone()));
+            app.app_mode = AppMode::SshPasswordPromt;
+            let (ssh_portable_pty_input_tx, ssh_portable_pty_output_rx) = ssh_operations::start_background_ssh(app.selected_ssh_host.clone());
+            app.ssh_portable_pty_input_tx = ssh_portable_pty_input_tx;
+            app.ssh_portable_pty_output_rx = ssh_portable_pty_output_rx;
         },
         AppMode::Rsync => app.app_mode = AppMode::SelectHost,
         AppMode::SshPasswordPromt => {},
@@ -46,7 +49,7 @@ fn handle_enter(app: &mut App) {
             app.commands.push_back(StartSsh);
         },
         AppMode::Rsync => {
-            app.commands.push_back(StartRsync);
+            ssh_operations::run_rsync_process(app.selected_ssh_host.clone(), app.rsync_local_path.clone(), app.rsync_remote_path.clone(), app.rsync_tx.clone());
         },
         AppMode::SshPasswordPromt => {
             let ssh_input_tx = &app.ssh_portable_pty_input_tx;

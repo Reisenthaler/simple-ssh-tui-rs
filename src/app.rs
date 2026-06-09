@@ -29,8 +29,6 @@ pub enum RsyncStatus {
 pub enum AppCommand {
     Quit,
     StartSsh,
-    StartRsync,
-    StartSshControlMaster(SshHost),
 }
 
 
