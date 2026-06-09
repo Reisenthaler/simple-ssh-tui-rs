@@ -29,7 +29,7 @@ fn main() -> Result<()> {
     let mut terminal = setup_terminal(app.ssh_hosts.len())?;
        
     loop {
-        draw_ui(&mut terminal, &mut app);
+        draw_ui(&mut terminal, &app);
 
     
         if event::poll(Duration::from_millis(50))? {
@@ -70,10 +70,24 @@ fn process_msgs_on_channels(app: &mut App) {
         if let Ok(all_folders) = app.remote_autocomplet_rx.try_recv() {
             let (_, prefix) = split_path(&app.rsync_remote_path);
             
-            app.remote_suggestions = all_folders
+            let remote_suggestions: Vec<String> = all_folders
                 .into_iter()
                 .filter(|folder| folder.to_lowercase().starts_with(&prefix.to_lowercase()))
                 .collect();
+
+
+            if !remote_suggestions.is_empty() {
+                if remote_suggestions.len() == 1 {
+                    let (parent_dir, _) = split_path(&app.rsync_remote_path);
+
+                    app.rsync_remote_path = format!("{}{}", parent_dir, remote_suggestions[0]);
+
+                    app.remote_suggestions.clear();
+                }
+                else {
+                    app.remote_suggestions = remote_suggestions;
+                }
+            }
         }
 
         if let Ok(rsync_status) = app.rsync_rx.try_recv() {

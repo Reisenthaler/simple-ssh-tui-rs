@@ -7,10 +7,10 @@ use ratatui::{
     widgets::{ Block, Borders, List, ListItem, Paragraph, Wrap }
     };
 use tracing::error;
-use crate::{AppMode, RsyncActiveInput, split_path, ssh_config::SshHost};
+use crate::{AppMode, RsyncActiveInput, ssh_config::SshHost};
 use crate::app::App;
 
-pub fn draw_ui(terminal: &mut Terminal<CrosstermBackend<Stdout>>, app: &mut App) {
+pub fn draw_ui(terminal: &mut Terminal<CrosstermBackend<Stdout>>, app: &App) {
     let terminal_draw_result = terminal.draw(|f| {
 
         match app.app_mode {
@@ -49,8 +49,7 @@ pub fn draw_ui(terminal: &mut Terminal<CrosstermBackend<Stdout>>, app: &mut App)
                 let ssh_host_details = List::new(host_details)
                     .block(Block::default().borders(Borders::TOP).title("------- SSH Details "));
         
-                
-                f.render_stateful_widget(list, chunks[0], &mut app.ssh_hosts_list_state);
+                f.render_stateful_widget(list, chunks[0], &mut app.ssh_hosts_list_state.clone());
                 f.render_widget(ssh_host_details, chunks[1]);
             }
             AppMode::Rsync => {
@@ -109,15 +108,6 @@ pub fn draw_ui(terminal: &mut Terminal<CrosstermBackend<Stdout>>, app: &mut App)
 
                 match app.rsync_active_input {
                     RsyncActiveInput::Local => {
-                        if !app.local_suggestions.is_empty() {
-                            if app.local_suggestions.len() == 1 {
-                                let (parent_dir, _) = split_path(&app.rsync_local_path);
-        
-                                app.rsync_local_path = format!("{}{}", parent_dir, app.local_suggestions[0]);
-        
-                                app.local_suggestions.clear();
-                            }
-                        }
                         
                         let path_suggestions = Paragraph::new(format!("{}", app.local_suggestions.join(" ")))
                             .block(Block::default()
@@ -126,15 +116,6 @@ pub fn draw_ui(terminal: &mut Terminal<CrosstermBackend<Stdout>>, app: &mut App)
                         f.render_widget(path_suggestions, vertical_chunks[1]);     
                     },
                     RsyncActiveInput::Remote => {  
-                        if !app.remote_suggestions.is_empty() {
-                            if app.remote_suggestions.len() == 1 {
-                                let (parent_dir, _) = split_path(&app.rsync_remote_path);
-        
-                                app.rsync_remote_path = format!("{}{}", parent_dir, app.remote_suggestions[0]);
-        
-                                app.remote_suggestions.clear();
-                            }
-                        }
                         
                         let path_suggestions = Paragraph::new(format!("{}", app.remote_suggestions.join(" ")))
                             .block(Block::default()

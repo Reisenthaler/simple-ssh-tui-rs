@@ -165,7 +165,7 @@ fn handle_tab(app: &mut App) {
             RsyncActiveInput::Local => {         
                 let (parent_dir, prefix) = split_path(&app.rsync_local_path);
             
-                let mut folder_list = Vec::new();
+                let mut folder_list = Vec::<String>::new();
     
                 if let Ok(entries) = fs::read_dir(&parent_dir) {
                     for entry in entries.filter_map(std::result::Result::ok) {
@@ -183,8 +183,18 @@ fn handle_tab(app: &mut App) {
                         }
                     }
                 }
-    
-                app.local_suggestions = folder_list;
+                if !folder_list.is_empty() {
+                    if folder_list.len() == 1 {
+                        let (parent_dir, _) = split_path(&app.rsync_local_path);
+
+                        app.rsync_local_path = format!("{}{}", parent_dir, folder_list[0]);
+
+                        app.local_suggestions.clear();
+                    }
+                    else {
+                        app.local_suggestions = folder_list;
+                    }
+                }
             },
             RsyncActiveInput::Remote => { 
                 let tx_clone = app.remote_autocomplet_tx.clone();
