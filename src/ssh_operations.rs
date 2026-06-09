@@ -200,6 +200,9 @@ pub fn start_background_ssh(ssh_host: SshHost) -> (Sender<Vec<u8>>, Receiver<Ssh
                     },
                     Ok(n) => {
                         let text: String = String::from_utf8_lossy(&buf[..n]).to_string();
+                        if contains_paasswd_promt(&text) {
+                            ssh_portable_pty_output_tx.send(SshEstablishControlMaster::UserInputReqired);
+                        }
                         ssh_portable_pty_output_tx.send(SshEstablishControlMaster::PasswordPromt(text));
                     },
                     Err(e) => {
@@ -283,4 +286,9 @@ fn control_path(ssh_host: &SshHost) -> PathBuf {
     let host = &ssh_host.host;
 
     PathBuf::from(format!("/tmp/simple-ssh-tui-rs-{}", host.replace(":", "-")))
+}
+
+
+fn contains_paasswd_promt(text: &String) -> bool {
+    text.contains("pass") || text.contains("Pass")
 }

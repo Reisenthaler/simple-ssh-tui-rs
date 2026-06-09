@@ -33,7 +33,6 @@ fn handle_toggle_app_mode(app: &mut App) {
     match app.app_mode {
         AppMode::SelectHost => {
             app.app_mode = AppMode::Rsync;
-            app.app_mode = AppMode::SshPasswordPromt;
             let (ssh_portable_pty_input_tx, ssh_portable_pty_output_rx) = ssh_operations::start_background_ssh(app.selected_ssh_host.clone());
             app.ssh_portable_pty_input_tx = ssh_portable_pty_input_tx;
             app.ssh_portable_pty_output_rx = ssh_portable_pty_output_rx;

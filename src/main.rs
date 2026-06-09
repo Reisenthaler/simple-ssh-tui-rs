@@ -100,6 +100,9 @@ fn process_msgs_on_channels(app: &mut App) {
                 },
                 SshEstablishControlMaster::PasswordPromt(text) => {
                     app.ssh_login_output.push_str(&text);
+                },
+                SshEstablishControlMaster::UserInputReqired => {
+                    app.app_mode = AppMode::SshPasswordPromt;
                 }
             }
         } 

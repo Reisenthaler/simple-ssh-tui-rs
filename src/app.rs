@@ -33,6 +33,7 @@ pub enum AppCommand {
 
 
 pub enum SshEstablishControlMaster {
+    UserInputReqired,
     PasswordPromt(String),
     Succsess,
     Failure,
