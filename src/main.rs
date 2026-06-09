@@ -1,4 +1,4 @@
-use std::time::Duration;
+use std::{ time::Duration,  io::Stdout};
 
 use crossterm::event::{ self, Event };
 use beautiful_log;
@@ -14,9 +14,10 @@ use events::key_to_action;
 use ui::draw_ui;
 use ssh_operations::{ start_ssh_process,  run_rsync_process, start_background_ssh };
 use terminal::{ setup_terminal, restore_terminal_to_normal_mode };
+use ratatui::{ Terminal, backend::CrosstermBackend };
 use crate::app::{ AppCommand };
 use crate::ssh_config::SshHost;
-use app::{ AppMode, RsyncStatus, RsyncActiveInput, SshEstablishControlMaster };
+use app::{ App, AppMode, RsyncStatus, RsyncActiveInput, SshEstablishControlMaster };
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
 
@@ -30,6 +31,50 @@ fn main() -> Result<()> {
     loop {
         draw_ui(&mut terminal, &mut app);
 
+        process_msgs_on_channels(&mut app);
+
+        process_app_commands(&mut app, &mut terminal)?;
+        
+        if event::poll(Duration::from_millis(50))? {
+            if let Event::Key(key) = event::read()? {
+                if let Some(action) = key_to_action(key) {
+                    actions::handle_action(&mut app, action);
+                }
+            }
+        }
+    }
+}
+
+fn process_app_commands(app: &mut App, mut terminal: &mut Terminal<CrosstermBackend<Stdout>>) -> Result<()> {
+        while let Some(cmd) = app.commands.pop_front() {
+            match cmd {
+                AppCommand::Quit => {
+                    restore_terminal_to_normal_mode(&mut terminal)?;
+                    return Ok(());
+                },
+                AppCommand::StartSsh => {
+                    restore_terminal_to_normal_mode(&mut terminal)?;
+                    
+                    start_ssh_process(app.selected_ssh_host.clone());
+                    return Ok(());
+                }
+                AppCommand::StartRsync => {
+                    run_rsync_process(app.selected_ssh_host.clone(), app.rsync_local_path.clone(), app.rsync_remote_path.clone(), app.rsync_tx.clone());
+                },
+                AppCommand::StartSshControlMaster(ssh_host) => {
+                    app.app_mode = AppMode::SshPasswordPromt;
+                    let (ssh_portable_pty_input_tx, ssh_portable_pty_output_rx) = start_background_ssh(ssh_host.clone());
+                    app.ssh_portable_pty_input_tx = ssh_portable_pty_input_tx;
+                    app.ssh_portable_pty_output_rx = ssh_portable_pty_output_rx;
+                }
+            }
+            
+        }
+        
+        Ok(())
+}
+
+fn process_msgs_on_channels(app: &mut App) {
         if let Ok(all_folders) = app.remote_autocomplet_rx.try_recv() {
             let (_, prefix) = split_path(&app.rsync_remote_path);
             
@@ -55,55 +100,18 @@ fn main() -> Result<()> {
 
         if let Ok(ssh_login_output) = app.ssh_portable_pty_output_rx.try_recv() {
             match ssh_login_output {
-            SshEstablishControlMaster::Succsess => {
-                app.app_mode = AppMode::Rsync;
-            },
-            SshEstablishControlMaster::Failure => {
-                app.app_mode = AppMode::SelectHost;
-            },
-            SshEstablishControlMaster::PasswordPromt(text) => {
-                app.ssh_login_output.push_str(&text);
+                SshEstablishControlMaster::Succsess => {
+                    app.app_mode = AppMode::Rsync;
+                },
+                SshEstablishControlMaster::Failure => {
+                    app.app_mode = AppMode::SelectHost;
+                },
+                SshEstablishControlMaster::PasswordPromt(text) => {
+                    app.ssh_login_output.push_str(&text);
+                }
             }
-        }
         } 
-        
-        if event::poll(Duration::from_millis(30))? {
-            if let Event::Key(key) = event::read()? {
-                if let Some(action) = key_to_action(key) {
-                    actions::handle_action(&mut app, action);
-                }
-            }
-        }
-        while let Some(cmd) = app.commands.pop_front() {
-            match cmd {
-                AppCommand::Quit => {
-                    restore_terminal_to_normal_mode(&mut terminal)?;
-                    return Ok(());
-                },
-                AppCommand::StartSsh => {
-                    restore_terminal_to_normal_mode(&mut terminal)?;
-                    
-                    start_ssh_process(app.selected_ssh_host.clone());
-                    return Ok(());
-                }
-                AppCommand::StartRsync => {
-                    run_rsync_process(app.selected_ssh_host.clone(), app.rsync_local_path.clone(), app.rsync_remote_path.clone(), app.rsync_tx.clone());
-                },
-                AppCommand::StartSshControlMaster(ssh_host) => {
-                    app.app_mode = AppMode::SshPasswordPromt;
-                   let (ssh_portable_pty_input_tx, ssh_portable_pty_output_rx) = start_background_ssh(ssh_host.clone());
-                   app.ssh_portable_pty_input_tx = ssh_portable_pty_input_tx;
-                   app.ssh_portable_pty_output_rx = ssh_portable_pty_output_rx;
-                }
-            }
-            
-        }
-    }
 }
-
-
-
-
 
 fn split_path(input: &str) -> (String, String) {
     if let Some(index) = input.rfind('/') {
