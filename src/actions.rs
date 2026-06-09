@@ -50,7 +50,7 @@ fn handle_enter(app: &mut App) {
         },
         AppMode::SshPasswordPromt => {
             let ssh_input_tx = &app.ssh_portable_pty_input_tx;
-            match ssh_input_tx.send(crate::app::PtyInput::Bytes(format!("{}\n", app.ssh_login_input).into_bytes())) {
+            match ssh_input_tx.send(Vec::<u8>::from(format!("{}\n", app.ssh_login_input).into_bytes())) {
                 Ok(_) => {
                     app.ssh_login_input = "".to_string();
 

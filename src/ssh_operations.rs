@@ -9,7 +9,7 @@ use portable_pty::{CommandBuilder, PtySize, native_pty_system, PtySystem};
 use crate::terminal::restore_terminal_to_normal_mode;
 use crate::ssh_config::SshHost;
 use crate::RsyncStatus;
-use crate::app::{ App, PtyInput, SshEstablishControlMaster };
+use crate::app::{ App, SshEstablishControlMaster };
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
@@ -143,10 +143,10 @@ fn split_path(input: &str) -> (String, String) {
     }
 }
 
-pub fn start_background_ssh(ssh_host: SshHost) -> (Sender<PtyInput>, Receiver<SshEstablishControlMaster>) {
+pub fn start_background_ssh(ssh_host: SshHost) -> (Sender<Vec<u8>>, Receiver<SshEstablishControlMaster>) {
     let host = ssh_host.host.clone();
     let (ssh_portable_pty_output_tx, ssh_portable_pty_output_rx) = mpsc::channel::<SshEstablishControlMaster>();
-    let (ssh_portable_pty_input_tx, ssh_portable_pty_input_rx) = mpsc::channel::<PtyInput>();
+    let (ssh_portable_pty_input_tx, ssh_portable_pty_input_rx) = mpsc::channel::<Vec<u8>>();
 
     if check_control_master(&ssh_host) {
         ssh_portable_pty_output_tx.send(SshEstablishControlMaster::Succsess);
@@ -218,15 +218,8 @@ pub fn start_background_ssh(ssh_host: SshHost) -> (Sender<PtyInput>, Receiver<Ss
         };
 
         while let Ok(msg) = ssh_portable_pty_input_rx.recv() {
-            match msg {
-                PtyInput::Bytes(data) => {
-                    let _ = writer.write_all(&data);
+                    let _ = writer.write_all(&msg);
                     let _ = writer.flush();
-                },
-                PtyInput::Resize(_, _) => {
-                    
-                },
-            }
         }
     
     });

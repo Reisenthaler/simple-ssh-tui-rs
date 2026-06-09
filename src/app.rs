@@ -33,10 +33,6 @@ pub enum AppCommand {
     StartSshControlMaster(SshHost),
 }
 
-pub enum PtyInput {
-    Bytes(Vec<u8>),
-    Resize(u16, u16),
-}
 
 pub enum SshEstablishControlMaster {
     PasswordPromt(String),
@@ -62,8 +58,8 @@ pub struct App {
     pub commands: VecDeque<AppCommand>,
     pub ssh_portable_pty_output_tx: Sender<SshEstablishControlMaster>,
     pub ssh_portable_pty_output_rx: Receiver<SshEstablishControlMaster>,
-    pub ssh_portable_pty_input_tx: Sender<PtyInput>,
-    pub ssh_portable_pty_input_rx: Receiver<PtyInput>,
+    pub ssh_portable_pty_input_tx: Sender<Vec<u8>>,
+    pub ssh_portable_pty_input_rx: Receiver<Vec<u8>>,
     pub ssh_login_output: String,
     pub ssh_login_input: String,
     
@@ -80,7 +76,7 @@ pub fn init_app() -> Result<App> {
     let (remote_autocomplet_tx, remote_autocomplet_rx) = mpsc::channel::<Vec<String>>();
     let (rsync_tx, rsync_rx) = mpsc::channel::<RsyncStatus>();
     let (ssh_portable_pty_output_tx, ssh_portable_pty_output_rx) = mpsc::channel::<SshEstablishControlMaster>();
-    let (ssh_portable_pty_input_tx, ssh_portable_pty_input_rx) = mpsc::channel::<PtyInput>();
+    let (ssh_portable_pty_input_tx, ssh_portable_pty_input_rx) = mpsc::channel::<Vec<u8>>();
 
     Ok(App {
         app_mode: AppMode::SelectHost,
