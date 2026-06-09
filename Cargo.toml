@@ -10,8 +10,6 @@ ratatui = "0.30.0"
 serde = "1.0.228"
 beautiful_log = { git = "https://github.com/Reisenthaler/beautiful_log" }
 tracing = "0.1.44"
-rusqlite = "0.40.1"
-chrono = "0.4.45"
 portable-pty = "0.9.0"
 
 [profile.release]
