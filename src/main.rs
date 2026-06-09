@@ -1,4 +1,4 @@
-use std::{ time::Duration,  io::Stdout};
+use std::{ time::Duration,  io::Stdout, process };
 
 use crossterm::event::{ self, Event };
 use beautiful_log;
@@ -31,17 +31,19 @@ fn main() -> Result<()> {
     loop {
         draw_ui(&mut terminal, &mut app);
 
-        process_msgs_on_channels(&mut app);
-
-        process_app_commands(&mut app, &mut terminal)?;
-        
+    
         if event::poll(Duration::from_millis(50))? {
             if let Event::Key(key) = event::read()? {
                 if let Some(action) = key_to_action(key) {
                     actions::handle_action(&mut app, action);
                 }
             }
-        }
+        }    
+
+        process_msgs_on_channels(&mut app);
+
+        process_app_commands(&mut app, &mut terminal)?;
+        
     }
 }
 
@@ -50,13 +52,13 @@ fn process_app_commands(app: &mut App, mut terminal: &mut Terminal<CrosstermBack
             match cmd {
                 AppCommand::Quit => {
                     restore_terminal_to_normal_mode(&mut terminal)?;
-                    return Ok(());
+                    process::exit(0);
                 },
                 AppCommand::StartSsh => {
                     restore_terminal_to_normal_mode(&mut terminal)?;
                     
                     start_ssh_process(app.selected_ssh_host.clone());
-                    return Ok(());
+                    process::exit(0);
                 },
             }
         }
