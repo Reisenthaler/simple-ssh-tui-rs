@@ -1,4 +1,4 @@
-use std::{ process::Command, thread, fs };
+use std::{ fs };
 use crate::{app::{App, AppCommand::{self, Quit, StartRsync, StartSsh}, AppMode, RsyncActiveInput}, ssh_operations};
 
 pub enum Action {

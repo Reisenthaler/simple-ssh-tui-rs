@@ -1,5 +1,5 @@
 use std::sync::mpsc::{Receiver, Sender};
-use std::{ env, sync::{ mpsc, Arc, Mutex }, collections::VecDeque };
+use std::{ env, sync::{ mpsc }, collections::VecDeque };
 use ratatui::{ widgets::ListState };
 use crate::SshHost;
 use crate::ssh_config::{ parse_ssh_config };

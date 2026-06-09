@@ -166,7 +166,7 @@ pub fn start_background_ssh(ssh_host: SshHost) -> (Sender<Vec<u8>>, Receiver<Ssh
         {
             Ok(p) => p,
             Err(e) => { 
-                error!("error creating portable_pty");
+                error!("error creating portable_pty: {}", e);
                 return;
             },
         };
@@ -181,12 +181,12 @@ pub fn start_background_ssh(ssh_host: SshHost) -> (Sender<Vec<u8>>, Receiver<Ssh
         let mut cmd = CommandBuilder::new("ssh");
         cmd.args(ssh_args);
         
-        let child = pair.slave.spawn_command(cmd);
+        pair.slave.spawn_command(cmd);
     
         let mut reader =  match pair.master.try_clone_reader() {
             Ok(p) => p,
             Err(e) => { 
-                error!("error getting reader from portable_pty");
+                error!("error getting reader from portable_pty: {}", e);
                 return;
             },
         };
@@ -212,7 +212,7 @@ pub fn start_background_ssh(ssh_host: SshHost) -> (Sender<Vec<u8>>, Receiver<Ssh
         let mut writer = match pair.master.take_writer() {
             Ok(writ) => writ,
             Err(e) => { 
-                error!("error getting reader from portable_pty");
+                error!("error getting reader from portable_pty: {}", e);
                 return;
             },
         };
@@ -252,7 +252,14 @@ pub fn check_control_master(ssh_host: &SshHost) -> bool {
 fn remove_control_master(ssh_host: &SshHost) {
     let control_path = control_path(&ssh_host);
 
-    fs::remove_file(&control_path);
+    match fs::remove_file(&control_path) {
+        Ok(_) => {
+           info!("succsesfully removed control master file: {}", &control_path.display()); 
+        },
+        Err(e) => {
+            error!("error wile removing control master file: {}   error: {}", &control_path.display(), e);
+        }
+    }
 }
 
 fn ssh_base_args(ssh_host: &SshHost) -> Vec<String> {

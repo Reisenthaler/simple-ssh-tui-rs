@@ -14,7 +14,7 @@ use events::key_to_action;
 use ui::draw_ui;
 use ssh_operations::{ start_ssh_process,  run_rsync_process, start_background_ssh };
 use terminal::{ setup_terminal, restore_terminal_to_normal_mode };
-use crate::app::{AppCommand, AppMode::Rsync};
+use crate::app::{ AppCommand };
 use crate::ssh_config::SshHost;
 use app::{ AppMode, RsyncStatus, RsyncActiveInput, SshEstablishControlMaster };
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
