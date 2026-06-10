@@ -1,4 +1,4 @@
-use std::io::Stdout;
+use std::{ io::Stdout, cmp };
 use crossterm::{
     event::{ DisableMouseCapture, EnableMouseCapture }, execute, terminal::{ disable_raw_mode, enable_raw_mode }};
 use ratatui::{ 
@@ -19,7 +19,7 @@ pub fn setup_terminal(ssh_hosts_count: usize) -> std::result::Result<Terminal<Cr
 
        let terminal = Terminal::with_options(backend, 
            TerminalOptions {
-               viewport: Viewport::Inline((ssh_hosts_count + 8).try_into().unwrap_or(20)),
+               viewport: Viewport::Inline((cmp::min(ssh_hosts_count, 6) + 8).try_into().unwrap_or(20)),
        });
 
        
