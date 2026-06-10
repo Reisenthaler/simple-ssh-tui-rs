@@ -1,15 +1,10 @@
-use std::{ f32::consts::E, io::{ BufRead, BufReader, Stdout }, fs, path::{Path, PathBuf}, process::{ Command, Stdio }, sync::mpsc::{self, Receiver, Sender}, thread };
+use std::{ fs, io::{ BufRead, BufReader }, path::{Path, PathBuf}, process::{ Command, Stdio }, sync::mpsc::{self, Receiver, Sender}, thread, time::Instant };
 use tracing::{ info, error };
-use crossterm::terminal::{disable_raw_mode, enable_raw_mode};
-use ratatui::{ 
-    Terminal, 
-    backend::{ CrosstermBackend }
-    };
-use portable_pty::{CommandBuilder, PtySize, native_pty_system, PtySystem};
-use crate::terminal::restore_terminal_to_normal_mode;
+use portable_pty::{CommandBuilder, PtySize, native_pty_system};
+use crate::app::{StatusMsg, StatusMsgLevel::{Error, Info}};
 use crate::ssh_config::SshHost;
 use crate::RsyncStatus;
-use crate::app::{ App, SshEstablishControlMaster };
+use crate::app::{ SshEstablishControlMaster };
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
@@ -103,8 +98,9 @@ pub fn run_rsync_process(ssh_host: SshHost, local_paht: String, remote_path: Str
     });
 }
 
-pub fn run_ls_over_ssh(ssh_host: SshHost, path_to_search: String, tx:  Sender<Vec<String>>) {
+pub fn run_ls_over_ssh(ssh_host: SshHost, path_to_search: String, tx:  Sender<Vec<String>>, status_msg_tx: Sender<StatusMsg>) {
     thread::spawn(move || {
+        let start = Instant::now();
         let (parent_dir, _) = split_path(&path_to_search);
         
         let mut folder_list = Vec::new();
@@ -115,16 +111,33 @@ pub fn run_ls_over_ssh(ssh_host: SshHost, path_to_search: String, tx:  Sender<Ve
             .arg(format!("ls -p {}", parent_dir))
             .output();
 
-        if let Ok(out) = output {
-            if out.status.success() {
+        if let Ok(out) = output && out.status.success() {
                 let stdout_str = String::from_utf8_lossy(&out.stdout);
                 folder_list = stdout_str.lines()
                     .filter(|line| line.ends_with('/'))
                         .map(|line| line.to_string())
                         .collect();
-            }
+                
+            match status_msg_tx.send(StatusMsg { level: Info, msg: format!("getting remote folders took: {}ms", start.elapsed().as_millis()) }) {
+                Ok(_) => {
+                    info!("sending status msg: \"{}\" was succsesfull", format!("getting remote folders took: {}ms", start.elapsed().as_millis()));
+                },
+                Err(e) => {
+                    error!("sending status msg: \"{}\" failed with: {}", format!("getting remote folders took: {}ms", start.elapsed().as_millis()), e);
+                }
+            } 
         }
-
+        else {
+            match status_msg_tx.send(StatusMsg { level: Error, msg: format!("getting remote folders failed after: {}ms", start.elapsed().as_millis()) }) {
+                Ok(_) => {
+                    info!("sending status msg: \"{}\" was succsesfull", format!("getting remote folders failed after: {}ms", start.elapsed().as_millis()));
+                },
+                Err(e) => {
+                    error!("sending status msg: \"{}\" failed with: {}", format!("getting remote folders failed after: {}ms", start.elapsed().as_millis()), e);
+                }
+            } 
+        }
+        
         let _ = tx.send(folder_list);
     });
 }

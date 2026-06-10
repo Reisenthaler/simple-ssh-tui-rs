@@ -202,7 +202,7 @@ fn handle_tab(app: &mut App) {
                 let ssh_host = app.selected_ssh_host.clone();
                 let path_to_search = app.rsync_remote_path.clone();
 
-                ssh_operations::run_ls_over_ssh(ssh_host, path_to_search, tx_clone);
+                ssh_operations::run_ls_over_ssh(ssh_host, path_to_search, tx_clone, app.status_msgs_tx.clone());
             }  
         }
     }   
