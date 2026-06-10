@@ -1,5 +1,5 @@
 use std::{ fs };
-use crate::{app::{App, AppCommand::{self, Quit, StartSsh}, AppMode, RsyncActiveInput}, ssh_operations};
+use crate::{app::{App, AppCommand::{self, Quit, StartSsh}, AppMode, RsyncActiveInput, StatusMsg, StatusMsgLevel::Error}, ssh_operations};
 
 pub enum Action {
     Quit,
@@ -60,12 +60,13 @@ fn handle_enter(app: &mut App) {
                     if ssh_operations::check_control_master(&app.selected_ssh_host) {
                         app.app_mode = AppMode::Rsync;
                     } else {
-                        app.status_msg = "failed to establisch control master".to_string();
+                        app.status_msgs_tx.send(StatusMsg{ level: Error, msg: "failed to establisch control master".to_string() });
                         app.app_mode = AppMode::SelectHost;
                     } 
                 },
                 Err(e) => {
-                    app.status_msg = format!("error while sending user input to portable_pty: {}", e.to_string());
+                    app.status_msgs_tx.send(StatusMsg{ level: Error, msg: format!("error while sending user input to portable_pty: {}", e.to_string()) });
+
                 }
             }
             

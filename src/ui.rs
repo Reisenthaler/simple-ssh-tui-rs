@@ -3,16 +3,24 @@ use ratatui::{
     Terminal, 
     backend::CrosstermBackend, 
     layout::{ Constraint, Direction, Layout, Position }, 
-    style::{Modifier, Style }, 
+    style::{ Modifier, Style, Color }, 
     widgets::{ Block, Borders, List, ListItem, Paragraph, Wrap }
     };
 use tracing::error;
-use crate::{AppMode, RsyncActiveInput, ssh_config::SshHost};
+use crate::{AppMode, RsyncActiveInput, app::StatusMsgLevel, ssh_config::SshHost};
 use crate::app::App;
 
 pub fn draw_ui(terminal: &mut Terminal<CrosstermBackend<Stdout>>, app: &App) {
     let terminal_draw_result = terminal.draw(|f| {
 
+        let main_chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Min(10),
+                Constraint::Length(1),
+            ])
+            .split(f.area());
+        
         match app.app_mode {
             AppMode::SelectHost => {
                 let chunks = Layout::default()
@@ -21,7 +29,7 @@ pub fn draw_ui(terminal: &mut Terminal<CrosstermBackend<Stdout>>, app: &App) {
                         Constraint::Min(2),
                         Constraint::Length(8),
                     ])
-                    .split(f.area());
+                    .split(main_chunks[0]);
         
         
                 let items: Vec<ListItem> = app.ssh_hosts
@@ -58,9 +66,8 @@ pub fn draw_ui(terminal: &mut Terminal<CrosstermBackend<Stdout>>, app: &App) {
                     .constraints([
                         Constraint::Length(3),
                         Constraint::Min(0),
-                        Constraint::Length(1),
                     ])
-                    .split(f.area());
+                    .split(main_chunks[0]);
 
 
                 let horizontal_chunks = Layout::default()
@@ -125,11 +132,6 @@ pub fn draw_ui(terminal: &mut Terminal<CrosstermBackend<Stdout>>, app: &App) {
                     }
                 }
               
-                let rsync_status = Paragraph::new(app.status_msg.to_string())
-                    .block(Block::default()
-                    .borders(Borders::NONE));
-
-                f.render_widget(rsync_status, vertical_chunks[2]);
 
                 
             },
@@ -140,9 +142,8 @@ pub fn draw_ui(terminal: &mut Terminal<CrosstermBackend<Stdout>>, app: &App) {
                     Constraint::Length(2),
                     Constraint::Min(0),
                     Constraint::Length(2),
-                    Constraint::Length(1),
                 ])
-                .split(f.area());
+                .split(main_chunks[0]);
                 
                 let title_paragraph = Paragraph::new(app.selected_ssh_host.host.clone())
                     .block(Block::default()
@@ -163,14 +164,22 @@ pub fn draw_ui(terminal: &mut Terminal<CrosstermBackend<Stdout>>, app: &App) {
                     .title("--- your input (press ENTER to send)"));
     
                 f.render_widget(ssh_input_paragraph, vertical_chunks[2]);
-                
-                let status_msg_paragraph = Paragraph::new(app.status_msg.to_string())
-                    .block(Block::default()
-                    .borders(Borders::NONE));
-    
-                f.render_widget(status_msg_paragraph, vertical_chunks[3]);
             },
-    }
+             
+        }
+    
+        let status_msg_color =  match app.status_msg.level {
+            StatusMsgLevel::Info => Color::Green,
+            StatusMsgLevel::Warn => Color::Yellow,
+            StatusMsgLevel::Error => Color::Red,
+        };
+        
+        let status_msg_paragraph = Paragraph::new(app.status_msg.msg.clone())
+            .block(Block::default()
+            .borders(Borders::NONE))
+            .style(Style::default().fg(status_msg_color));
+    
+        f.render_widget(status_msg_paragraph, main_chunks[1]);
     });
 
 

@@ -2,6 +2,7 @@ use std::sync::mpsc::{Receiver, Sender};
 use std::{ env, sync::{ mpsc }, collections::VecDeque };
 use ratatui::{ widgets::ListState };
 use crate::SshHost;
+use crate::app::StatusMsgLevel::Info;
 use crate::ssh_config::{ parse_ssh_config };
 use crate::Result;
 
@@ -39,6 +40,16 @@ pub enum SshEstablishControlMaster {
     Failure,
 }
 
+pub enum StatusMsgLevel {
+    Info,
+    Warn,
+    Error,
+}
+pub struct StatusMsg {
+    pub level: StatusMsgLevel,
+    pub msg: String,
+}
+
 pub struct App {
     pub app_mode: AppMode,
     pub rsync_active_input: RsyncActiveInput,
@@ -49,7 +60,9 @@ pub struct App {
     pub rsync_remote_path: String,
     pub local_suggestions: Vec<String>,
     pub remote_suggestions: Vec<String>,
-    pub status_msg: String,
+    pub status_msgs_tx: Sender<StatusMsg>,
+    pub status_msgs_rx: Receiver<StatusMsg>,
+    pub status_msg: StatusMsg,
     pub remote_autocomplet_tx: Sender<Vec<String>>,
     pub remote_autocomplet_rx: Receiver<Vec<String>>,
     pub rsync_tx: Sender<RsyncStatus>,
@@ -76,7 +89,9 @@ pub fn init_app() -> Result<App> {
     let (rsync_tx, rsync_rx) = mpsc::channel::<RsyncStatus>();
     let (ssh_portable_pty_output_tx, ssh_portable_pty_output_rx) = mpsc::channel::<SshEstablishControlMaster>();
     let (ssh_portable_pty_input_tx, ssh_portable_pty_input_rx) = mpsc::channel::<Vec<u8>>();
+    let (status_msgs_tx, status_msgs_rx) = mpsc::channel::<StatusMsg>();
 
+    let status_msg = StatusMsg { level: Info, msg: "".to_string() };
     Ok(App {
         app_mode: AppMode::SelectHost,
         rsync_active_input: RsyncActiveInput::Local,
@@ -85,7 +100,9 @@ pub fn init_app() -> Result<App> {
         ssh_hosts_list_state: list_state,
         rsync_local_path: env::current_dir().unwrap().to_string_lossy().into_owned(),
         rsync_remote_path: "/".to_string(),
-        status_msg: "".to_string(),
+        status_msgs_tx: status_msgs_tx,
+        status_msgs_rx: status_msgs_rx,
+        status_msg: status_msg,
         local_suggestions: Vec::<String>::new(),
         remote_suggestions: Vec::<String>::new(),
         remote_autocomplet_tx: remote_autocomplet_tx,
