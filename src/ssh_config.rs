@@ -1,5 +1,5 @@
 use std::{ fs, io::{ Error, ErrorKind, } };
-use tracing::{ debug, error };
+use tracing::{ debug, error, info };
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
@@ -73,7 +73,10 @@ pub fn parse_ssh_config() -> Result<Vec<SshHost>> {
         }
         
     }
+    ssh_hosts.push(current_ssh_host);
+    
 
+    info!("ssh_hosts: {:#?}", ssh_hosts);
     Ok(ssh_hosts)
 }
 
