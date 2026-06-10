@@ -10,6 +10,7 @@ pub enum Action {
     Enter,
     Backspace,
     Input(char),
+    RsyncRemoteToLocal,
 }
 
 pub fn handle_action(mut app: &mut App, action: Action) {
@@ -22,6 +23,7 @@ pub fn handle_action(mut app: &mut App, action: Action) {
         Action::Input(c) => handle_input(&mut app, c),
         Action::Backspace => handle_backspace(&mut app),
         Action::Tab => handle_tab(&mut app),
+        Action::RsyncRemoteToLocal => handle_rsync_remote_to_local(&app),
     }
 }
 
@@ -48,7 +50,8 @@ fn handle_enter(app: &mut App) {
             app.commands.push_back(StartSsh);
         },
         AppMode::Rsync => {
-            ssh_operations::run_rsync_process(app.selected_ssh_host.clone(), app.rsync_local_path.clone(), app.rsync_remote_path.clone(), app.rsync_tx.clone());
+            // rsync local -> remote
+            ssh_operations::run_rsync_process(app.selected_ssh_host.clone(), app.rsync_local_path.clone(), app.rsync_remote_path.clone(), true, app.rsync_tx.clone());
         },
         AppMode::SshPasswordPromt => {
             let ssh_input_tx = &app.ssh_portable_pty_input_tx;
@@ -72,6 +75,11 @@ fn handle_enter(app: &mut App) {
             
         },
     }
+}
+
+fn handle_rsync_remote_to_local(app: &App) {
+    // rsync remote -> local
+    ssh_operations::run_rsync_process(app.selected_ssh_host.clone(), app.rsync_local_path.clone(), app.rsync_remote_path.clone(), false, app.rsync_tx.clone());
 }
 
 fn handle_move_up(app: &mut App) {

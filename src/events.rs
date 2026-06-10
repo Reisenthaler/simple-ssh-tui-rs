@@ -10,6 +10,9 @@ pub fn key_to_action(key_event: KeyEvent) -> Option<Action> {
         KeyCode::Char('r') if key_event.modifiers.contains(KeyModifiers::CONTROL) => {
             Some(Action::ToggleAppMode)
         },
+        KeyCode::Char('d') if key_event.modifiers.contains(KeyModifiers::CONTROL) => {
+            Some(Action::RsyncRemoteToLocal)
+        },
         KeyCode::Up => Some(Action::MoveUp),
         KeyCode::Down => Some(Action::MoveDown),
         KeyCode::Tab => Some(Action::Tab),
