@@ -8,6 +8,11 @@ use crate::app::{ SshEstablishControlMaster };
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
+pub enum TransferDirection {
+    Download,
+    Upload
+}
+
 pub fn start_ssh_process(ssh_host: SshHost) {
         info!("starting ssh");
 
@@ -32,10 +37,8 @@ pub fn start_ssh_process(ssh_host: SshHost) {
         }
 }
 
-pub fn run_rsync_process(ssh_host: SshHost, local_path: String, remote_path: String, local_to_remote: bool, tx: mpsc::Sender<RsyncStatus>) {
+pub fn run_rsync_process(ssh_host: SshHost, local_path: String, remote_path: String, transfer_direction: TransferDirection, tx: mpsc::Sender<RsyncStatus>) {
     thread::spawn(move || {
-        let remote_path_with_host = format!("{}:{}", ssh_host.host, remote_path);
-
         let homebrew_rsync_path = "/opt/homebrew/bin/rsync";
         let rsyc_binary = if Path::new(homebrew_rsync_path).exists() {
             homebrew_rsync_path
@@ -45,15 +48,15 @@ pub fn run_rsync_process(ssh_host: SshHost, local_path: String, remote_path: Str
 
         let ssh_rsh = format!("ssh {}", ssh_base_args(&ssh_host).join(" "));
 
-        let source = match local_to_remote {
-            true => local_path.clone(),
-            false => remote_path_with_host.clone()
+        let (source, destination) = match transfer_direction {
+            TransferDirection::Download => {
+                (local_path, format!("{}:{}", ssh_host.host, remote_path))
+            },
+            TransferDirection::Upload => {
+                (format!("{}:{}", ssh_host.host, remote_path), local_path)
+            }
         };
-        
-        let destination = match local_to_remote  {
-            true => remote_path_with_host,
-            false => local_path,
-        };
+
         
         let child = Command::new(rsyc_binary)
             .env("RSYNC_RSH", ssh_rsh)

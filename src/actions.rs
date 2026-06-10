@@ -51,7 +51,7 @@ fn handle_enter(app: &mut App) {
         },
         AppMode::Rsync => {
             // rsync local -> remote
-            ssh_operations::run_rsync_process(app.selected_ssh_host.clone(), app.rsync_local_path.clone(), app.rsync_remote_path.clone(), true, app.rsync_tx.clone());
+            ssh_operations::run_rsync_process(app.selected_ssh_host.clone(), app.rsync_local_path.clone(), app.rsync_remote_path.clone(), ssh_operations::TransferDirection::Download, app.rsync_tx.clone());
         },
         AppMode::SshPasswordPromt => {
             let ssh_input_tx = &app.ssh_portable_pty_input_tx;
@@ -79,7 +79,7 @@ fn handle_enter(app: &mut App) {
 
 fn handle_rsync_remote_to_local(app: &App) {
     // rsync remote -> local
-    ssh_operations::run_rsync_process(app.selected_ssh_host.clone(), app.rsync_local_path.clone(), app.rsync_remote_path.clone(), false, app.rsync_tx.clone());
+    ssh_operations::run_rsync_process(app.selected_ssh_host.clone(), app.rsync_local_path.clone(), app.rsync_remote_path.clone(), ssh_operations::TransferDirection::Upload, app.rsync_tx.clone());
 }
 
 fn handle_move_up(app: &mut App) {

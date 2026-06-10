@@ -23,7 +23,7 @@ type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
 
 fn main() -> Result<()> {
-    beautiful_log::init_logging("INFO", beautiful_log::LogTarget::File, Some("simple-ssh-tui-rs.log"));
+    beautiful_log::init_logging("debug", beautiful_log::LogTarget::File, Some("simple-ssh-tui-rs.log"));
 
     let mut app = app::init_app().unwrap();
     
