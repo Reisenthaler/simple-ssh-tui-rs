@@ -172,28 +172,7 @@ fn handle_tab(app: &mut App) {
     if app.app_mode == AppMode::Rsync {
         match app.rsync_active_input {
             RsyncActiveInput::Local => {         
-                let (parent_dir, prefix) = split_path(&app.rsync_local_path);
-            
-                let mut folder_list = Vec::<String>::new();
-                let mut file_list = Vec::<String>::new();
-
-                if let Ok(entries) = fs::read_dir(&parent_dir) {
-                    for entry in entries.filter_map(std::result::Result::ok) {
-                        let file_name = entry.file_name().to_string_lossy().to_string();
-    
-                        let is_dir = entry.file_type().map(|ft| ft.is_dir()).unwrap_or(false);
-                      
-                        
-                        if file_name.to_lowercase().starts_with(&prefix.to_lowercase()) {
-                            match is_dir {
-                                true => folder_list.push(file_name),
-                                false => file_list.push(file_name),
-                            }
-                        }
-                    }
-
-                    process_local_suggestions(folder_list, file_list, app);
-                }
+                get_local_suggestions(app);
                 
             },
             RsyncActiveInput::Remote => { 
@@ -207,8 +186,34 @@ fn handle_tab(app: &mut App) {
     }   
 }
 
+pub fn get_local_suggestions(app: &mut App) {
+    let (parent_dir, prefix) = split_path(&app.rsync_local_path);
+
+    let mut folder_list = Vec::<String>::new();
+    let mut file_list = Vec::<String>::new();
+
+    if let Ok(entries) = fs::read_dir(&parent_dir) {
+        for entry in entries.filter_map(std::result::Result::ok) {
+            let file_name = entry.file_name().to_string_lossy().to_string();
+
+            let is_dir = entry.file_type().map(|ft| ft.is_dir()).unwrap_or(false);
+          
+            
+            if file_name.to_lowercase().starts_with(&prefix.to_lowercase()) {
+                match is_dir {
+                    true => folder_list.push(file_name),
+                    false => file_list.push(file_name),
+                }
+            }
+        }
+
+        process_local_suggestions(folder_list, file_list, app);
+    }
+}
 
 pub fn process_local_suggestions(folder_list: Vec<String>, file_list: Vec<String>, app: &mut App) {
+    let old_local_path = app.rsync_local_path.clone();
+    
     if folder_list.len() == 1 && file_list.len() == 0 {
         let (parent_dir, _) = split_path(&app.rsync_local_path);
     
@@ -216,6 +221,11 @@ pub fn process_local_suggestions(folder_list: Vec<String>, file_list: Vec<String
     
         app.local_suggestions.folders.clear();
         app.local_suggestions.files.clear();
+
+        // path has changed -> get suggestions for new directory
+        if app.rsync_local_path != old_local_path {
+            get_local_suggestions(app);
+        }
     } else if file_list.len() == 1 && folder_list.len() == 0 {
         let (parent_dir, _) = split_path(&app.rsync_local_path);
     
@@ -223,6 +233,11 @@ pub fn process_local_suggestions(folder_list: Vec<String>, file_list: Vec<String
     
         app.local_suggestions.folders.clear();
         app.local_suggestions.files.clear();
+
+        // path has changed -> get suggestions for new directory
+        if app.rsync_local_path != old_local_path {
+            get_local_suggestions(app);
+        }
     }
     else {
         app.local_suggestions.folders = folder_list;
@@ -231,6 +246,8 @@ pub fn process_local_suggestions(folder_list: Vec<String>, file_list: Vec<String
 }
 
 pub fn process_remote_suggestions(folder_list: Vec<String>, file_list: Vec<String>, app: &mut App) {
+    let old_remote_path = app.rsync_remote_path.clone();
+    
     if folder_list.len() == 1 && file_list.len() == 0 {
         let (parent_dir, _) = split_path(&app.rsync_remote_path);
     
@@ -238,6 +255,11 @@ pub fn process_remote_suggestions(folder_list: Vec<String>, file_list: Vec<Strin
     
         app.remote_suggestions.folders.clear();
         app.remote_suggestions.files.clear();
+
+        // path has changed -> get suggestions for new directory
+        if app.rsync_remote_path != old_remote_path {
+            ssh_operations::run_ls_over_ssh(app.selected_ssh_host.clone(), app.rsync_remote_path.clone(), app.remote_autocomplet_tx.clone(), app.status_msgs_tx.clone());
+        }
     } else if file_list.len() == 1 && folder_list.len() == 0 {
         let (parent_dir, _) = split_path(&app.rsync_remote_path);
     
@@ -245,6 +267,11 @@ pub fn process_remote_suggestions(folder_list: Vec<String>, file_list: Vec<Strin
     
         app.remote_suggestions.folders.clear();
         app.remote_suggestions.files.clear();
+
+        // path has changed -> get suggestions for new directory
+        if app.rsync_remote_path != old_remote_path {
+            ssh_operations::run_ls_over_ssh(app.selected_ssh_host.clone(), app.rsync_remote_path.clone(), app.remote_autocomplet_tx.clone(), app.status_msgs_tx.clone());
+        }
     }
     else {
         app.remote_suggestions.folders = folder_list;
