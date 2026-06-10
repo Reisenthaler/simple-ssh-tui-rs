@@ -50,6 +50,11 @@ pub struct StatusMsg {
     pub msg: String,
 }
 
+pub struct PathSuggestions {
+    pub folders: Vec<String>,
+    pub files: Vec<String>
+}
+
 pub struct App {
     pub app_mode: AppMode,
     pub rsync_active_input: RsyncActiveInput,
@@ -58,13 +63,13 @@ pub struct App {
     pub ssh_hosts_list_state: ListState,
     pub rsync_local_path: String,
     pub rsync_remote_path: String,
-    pub local_suggestions: Vec<String>,
-    pub remote_suggestions: Vec<String>,
+    pub local_suggestions: PathSuggestions,
+    pub remote_suggestions: PathSuggestions,
     pub status_msgs_tx: Sender<StatusMsg>,
     pub status_msgs_rx: Receiver<StatusMsg>,
     pub status_msg: StatusMsg,
-    pub remote_autocomplet_tx: Sender<Vec<String>>,
-    pub remote_autocomplet_rx: Receiver<Vec<String>>,
+    pub remote_autocomplet_tx: Sender<PathSuggestions>,
+    pub remote_autocomplet_rx: Receiver<PathSuggestions>,
     pub rsync_tx: Sender<RsyncStatus>,
     pub rsync_rx: Receiver<RsyncStatus>,
     pub commands: VecDeque<AppCommand>,
@@ -77,7 +82,6 @@ pub struct App {
     
 }
 
-
 pub fn init_app() -> Result<App> {
     let ssh_hosts =  parse_ssh_config()?;
     let selected_ssh_host: SshHost = ssh_hosts[0].clone();
@@ -85,13 +89,17 @@ pub fn init_app() -> Result<App> {
     let mut list_state = ListState::default();
     list_state.select(Some(0));
 
-    let (remote_autocomplet_tx, remote_autocomplet_rx) = mpsc::channel::<Vec<String>>();
+    let (remote_autocomplet_tx, remote_autocomplet_rx) = mpsc::channel::<PathSuggestions>();
     let (rsync_tx, rsync_rx) = mpsc::channel::<RsyncStatus>();
     let (ssh_portable_pty_output_tx, ssh_portable_pty_output_rx) = mpsc::channel::<SshEstablishControlMaster>();
     let (ssh_portable_pty_input_tx, ssh_portable_pty_input_rx) = mpsc::channel::<Vec<u8>>();
     let (status_msgs_tx, status_msgs_rx) = mpsc::channel::<StatusMsg>();
 
     let status_msg = StatusMsg { level: Info, msg: "".to_string() };
+
+    let local_suggestions = PathSuggestions { folders: Vec::<String>::new(), files: Vec::<String>::new() };
+    let remote_suggestions = PathSuggestions { folders: Vec::<String>::new(), files: Vec::<String>::new() };
+    
     Ok(App {
         app_mode: AppMode::SelectHost,
         rsync_active_input: RsyncActiveInput::Local,
@@ -103,8 +111,8 @@ pub fn init_app() -> Result<App> {
         status_msgs_tx: status_msgs_tx,
         status_msgs_rx: status_msgs_rx,
         status_msg: status_msg,
-        local_suggestions: Vec::<String>::new(),
-        remote_suggestions: Vec::<String>::new(),
+        local_suggestions: local_suggestions,
+        remote_suggestions: remote_suggestions,
         remote_autocomplet_tx: remote_autocomplet_tx,
         remote_autocomplet_rx: remote_autocomplet_rx,
         rsync_tx: rsync_tx,

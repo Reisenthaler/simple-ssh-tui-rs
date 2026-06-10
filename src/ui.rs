@@ -3,7 +3,8 @@ use ratatui::{
     Terminal, 
     backend::CrosstermBackend, 
     layout::{ Constraint, Direction, Layout, Position }, 
-    style::{ Modifier, Style, Color }, 
+    style::{ Color, Modifier, Style }, 
+    text::{ Span, Line }, 
     widgets::{ Block, Borders, List, ListItem, Paragraph, Wrap }
     };
 use tracing::error;
@@ -115,20 +116,12 @@ pub fn draw_ui(terminal: &mut Terminal<CrosstermBackend<Stdout>>, app: &App) {
 
                 match app.rsync_active_input {
                     RsyncActiveInput::Local => {
-                        
-                        let path_suggestions = Paragraph::new(format!("{}", app.local_suggestions.join(" ")))
-                            .block(Block::default()
-                            .borders(Borders::ALL).title(" local "))
-                            .wrap(Wrap { trim: true });
-                        f.render_widget(path_suggestions, vertical_chunks[1]);     
+                        let path_suggestions_paragraph = construct_path_suggestions_paragraph(&app.local_suggestions.folders, &app.local_suggestions.files);
+                        f.render_widget(path_suggestions_paragraph, vertical_chunks[1]);     
                     },
                     RsyncActiveInput::Remote => {  
-                        
-                        let path_suggestions = Paragraph::new(format!("{}", app.remote_suggestions.join(" ")))
-                            .block(Block::default()
-                            .borders(Borders::ALL).title(" ssh host "))
-                            .wrap(Wrap { trim: true });
-                        f.render_widget(path_suggestions, vertical_chunks[1]);        
+                        let path_suggestions_paragraph = construct_path_suggestions_paragraph(&app.remote_suggestions.folders, &app.remote_suggestions.files);
+                        f.render_widget(path_suggestions_paragraph, vertical_chunks[1]);        
                     }
                 }
               
@@ -210,4 +203,33 @@ fn get_host_detail_list(ssh_host: &SshHost) -> Vec<ListItem<'_>> {
     }
 
     return host_details;
+}
+
+
+fn construct_path_suggestions_paragraph(folders: &[String], files: &[String] ) -> Paragraph<'static> {
+    let mut folder_spans: Vec<Span<'static>> = folders
+        .iter()
+        .flat_map(|folder| {
+            [
+                Span::styled(format!(" {}", folder), Style::default().fg(Color::Blue)),
+                Span::styled("/", Style::default().fg(Color::Gray))
+            ]
+        })
+        .collect();
+
+    let file_spans: Vec<Span<'static>> = files
+        .iter()
+        .flat_map(|file| {
+            [
+                Span::styled(format!(" {}", file), Style::default().fg(Color::Gray)),
+            ]
+        })
+        .collect();
+
+    folder_spans.extend(file_spans);
+    
+    Paragraph::new(Line::from(folder_spans))    
+        .block(Block::default()
+        .borders(Borders::ALL).title(" local "))
+        .wrap(Wrap { trim: true })
 }

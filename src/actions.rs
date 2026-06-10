@@ -1,4 +1,4 @@
-use std::{ fs };
+use std::{ fs, str };
 use crate::{app::{App, AppCommand::{self, Quit, StartSsh}, AppMode, RsyncActiveInput, StatusMsg, StatusMsgLevel::Error}, ssh_operations};
 
 pub enum Action {
@@ -175,35 +175,26 @@ fn handle_tab(app: &mut App) {
                 let (parent_dir, prefix) = split_path(&app.rsync_local_path);
             
                 let mut folder_list = Vec::<String>::new();
-    
+                let mut file_list = Vec::<String>::new();
+
                 if let Ok(entries) = fs::read_dir(&parent_dir) {
                     for entry in entries.filter_map(std::result::Result::ok) {
                         let file_name = entry.file_name().to_string_lossy().to_string();
     
                         let is_dir = entry.file_type().map(|ft| ft.is_dir()).unwrap_or(false);
-                        let display_name = if is_dir {
-                            format!("{}/", file_name)
-                        } else {
-                            file_name
-                        };
+                      
                         
-                        if display_name.to_lowercase().starts_with(&prefix.to_lowercase()) {
-                            folder_list.push(display_name);
+                        if file_name.to_lowercase().starts_with(&prefix.to_lowercase()) {
+                            match is_dir {
+                                true => folder_list.push(file_name),
+                                false => file_list.push(file_name),
+                            }
                         }
                     }
-                }
-                if !folder_list.is_empty() {
-                    if folder_list.len() == 1 {
-                        let (parent_dir, _) = split_path(&app.rsync_local_path);
 
-                        app.rsync_local_path = format!("{}{}", parent_dir, folder_list[0]);
-
-                        app.local_suggestions.clear();
-                    }
-                    else {
-                        app.local_suggestions = folder_list;
-                    }
+                    process_local_suggestions(folder_list, file_list, app);
                 }
+                
             },
             RsyncActiveInput::Remote => { 
                 let tx_clone = app.remote_autocomplet_tx.clone();
@@ -217,7 +208,49 @@ fn handle_tab(app: &mut App) {
 }
 
 
+pub fn process_local_suggestions(folder_list: Vec<String>, file_list: Vec<String>, app: &mut App) {
+    if folder_list.len() == 1 && file_list.len() == 0 {
+        let (parent_dir, _) = split_path(&app.rsync_local_path);
+    
+        app.rsync_local_path = format!("{}{}/", parent_dir, folder_list[0]);
+    
+        app.local_suggestions.folders.clear();
+        app.local_suggestions.files.clear();
+    } else if file_list.len() == 1 && folder_list.len() == 0 {
+        let (parent_dir, _) = split_path(&app.rsync_local_path);
+    
+        app.rsync_local_path = format!("{}{}", parent_dir, file_list[0]);
+    
+        app.local_suggestions.folders.clear();
+        app.local_suggestions.files.clear();
+    }
+    else {
+        app.local_suggestions.folders = folder_list;
+        app.local_suggestions.files = file_list;
+    }
+}
 
+pub fn process_remote_suggestions(folder_list: Vec<String>, file_list: Vec<String>, app: &mut App) {
+    if folder_list.len() == 1 && file_list.len() == 0 {
+        let (parent_dir, _) = split_path(&app.rsync_remote_path);
+    
+        app.rsync_remote_path = format!("{}{}/", parent_dir, folder_list[0]);
+    
+        app.remote_suggestions.folders.clear();
+        app.remote_suggestions.files.clear();
+    } else if file_list.len() == 1 && folder_list.len() == 0 {
+        let (parent_dir, _) = split_path(&app.rsync_remote_path);
+    
+        app.rsync_remote_path = format!("{}{}", parent_dir, file_list[0]);
+    
+        app.remote_suggestions.folders.clear();
+        app.remote_suggestions.files.clear();
+    }
+    else {
+        app.remote_suggestions.folders = folder_list;
+        app.remote_suggestions.files = file_list;
+    }
+}
 
 fn split_path(input: &str) -> (String, String) {
     if let Some(index) = input.rfind('/') {

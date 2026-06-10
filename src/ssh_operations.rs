@@ -1,7 +1,7 @@
 use std::{ fs, io::{ BufRead, BufReader }, path::{Path, PathBuf}, process::{ Command, Stdio }, sync::mpsc::{self, Receiver, Sender}, thread, time::Instant };
 use tracing::{ info, error };
 use portable_pty::{CommandBuilder, PtySize, native_pty_system};
-use crate::app::{StatusMsg, StatusMsgLevel::{Error, Info}};
+use crate::app::{StatusMsg, StatusMsgLevel::{Error, Info}, PathSuggestions };
 use crate::ssh_config::SshHost;
 use crate::RsyncStatus;
 use crate::app::{ SshEstablishControlMaster };
@@ -111,12 +111,13 @@ pub fn run_rsync_process(ssh_host: SshHost, local_path: String, remote_path: Str
     });
 }
 
-pub fn run_ls_over_ssh(ssh_host: SshHost, path_to_search: String, tx:  Sender<Vec<String>>, status_msg_tx: Sender<StatusMsg>) {
+pub fn run_ls_over_ssh(ssh_host: SshHost, path_to_search: String, tx:  Sender<PathSuggestions>, status_msg_tx: Sender<StatusMsg>) {
     thread::spawn(move || {
         let start = Instant::now();
-        let (parent_dir, _) = split_path(&path_to_search);
+        let (parent_dir, prefix) = split_path(&path_to_search);
         
         let mut folder_list = Vec::new();
+        let mut file_list = Vec::new();
 
         let output = Command::new("ssh")
             .args(ssh_base_args(&ssh_host))
@@ -126,8 +127,15 @@ pub fn run_ls_over_ssh(ssh_host: SshHost, path_to_search: String, tx:  Sender<Ve
 
         if let Ok(out) = output && out.status.success() {
                 let stdout_str = String::from_utf8_lossy(&out.stdout);
+
                 folder_list = stdout_str.lines()
-                    .filter(|line| line.ends_with('/'))
+                    .filter(|line| line.starts_with(&prefix))
+                    .filter_map(|line| line.strip_suffix('/').map(|striped| striped.to_string()))
+                        .collect();
+
+                file_list = stdout_str.lines()
+                    .filter(|line| line.starts_with(&prefix))
+                    .filter(|line| !line.ends_with('/'))
                         .map(|line| line.to_string())
                         .collect();
                 
@@ -150,8 +158,8 @@ pub fn run_ls_over_ssh(ssh_host: SshHost, path_to_search: String, tx:  Sender<Ve
                 }
             } 
         }
-        
-        let _ = tx.send(folder_list);
+        info!("remote suggestions: folders {:?} files {:?}",folder_list, file_list);
+        let _ = tx.send(PathSuggestions { folders: folder_list, files: file_list });
     });
 }
 
