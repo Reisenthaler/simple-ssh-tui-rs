@@ -1,4 +1,6 @@
 use std::{ fs, str };
+use tracing::info;
+
 use crate::{app::{App, AppCommand::{self, Quit, StartSsh}, AppMode, RsyncActiveInput, StatusMsg, StatusMsgLevel::Error}, ssh_operations};
 
 pub enum Action {
@@ -213,10 +215,10 @@ pub fn get_local_suggestions(app: &mut App) {
 
 pub fn process_local_suggestions(folder_list: Vec<String>, file_list: Vec<String>, app: &mut App) {
     let old_local_path = app.rsync_local_path.clone();
+    let (parent_dir, _) = split_path(&app.rsync_local_path);
+
     
-    if folder_list.len() == 1 && file_list.len() == 0 {
-        let (parent_dir, _) = split_path(&app.rsync_local_path);
-    
+    if folder_list.len() == 1 && file_list.len() == 0 {    
         app.rsync_local_path = format!("{}{}/", parent_dir, folder_list[0]);
     
         app.local_suggestions.folders.clear();
@@ -226,9 +228,7 @@ pub fn process_local_suggestions(folder_list: Vec<String>, file_list: Vec<String
         if app.rsync_local_path != old_local_path {
             get_local_suggestions(app);
         }
-    } else if file_list.len() == 1 && folder_list.len() == 0 {
-        let (parent_dir, _) = split_path(&app.rsync_local_path);
-    
+    } else if file_list.len() == 1 && folder_list.len() == 0 {    
         app.rsync_local_path = format!("{}{}", parent_dir, file_list[0]);
     
         app.local_suggestions.folders.clear();
@@ -239,18 +239,59 @@ pub fn process_local_suggestions(folder_list: Vec<String>, file_list: Vec<String
             get_local_suggestions(app);
         }
     }
-    else {
+    else {   
+        match path_char_autcomplete(folder_list.clone(), file_list.clone()) {
+            Some(new_prefix) => app.rsync_local_path = parent_dir + &new_prefix,
+            None => {},
+        }
+            
+        
         app.local_suggestions.folders = folder_list;
         app.local_suggestions.files = file_list;
     }
 }
 
+
+fn path_char_autcomplete(folder_list: Vec<String>, file_list: Vec<String>) -> Option<String> {
+    let mut position = 0;    
+    let mut new_prefix = "".to_string();
+    let mut all_strings: Vec<String> = folder_list;
+    all_strings.extend(file_list);  
+
+    if !all_strings.is_empty() {            
+            loop {
+                match same_char_at(&all_strings, position) {
+                    Some(c) => new_prefix.push(c),
+                    None => break,
+                }
+
+                position += 1;
+            }
+
+        return Some(new_prefix);
+    }
+    
+    None
+}
+
+fn same_char_at(strings: &[String], position: usize) -> Option<char> {
+    let mut iter = strings.iter().map(|s| s.chars().nth(position));
+
+    let first = iter.next()??;
+
+    if iter.all(|c| c == Some(first)) {
+        Some(first)
+    } else {
+        None
+    }
+}
+
+
 pub fn process_remote_suggestions(folder_list: Vec<String>, file_list: Vec<String>, app: &mut App) {
     let old_remote_path = app.rsync_remote_path.clone();
+    let (parent_dir, _) = split_path(&app.rsync_remote_path);
     
     if folder_list.len() == 1 && file_list.len() == 0 {
-        let (parent_dir, _) = split_path(&app.rsync_remote_path);
-    
         app.rsync_remote_path = format!("{}{}/", parent_dir, folder_list[0]);
     
         app.remote_suggestions.folders.clear();
@@ -260,9 +301,7 @@ pub fn process_remote_suggestions(folder_list: Vec<String>, file_list: Vec<Strin
         if app.rsync_remote_path != old_remote_path {
             ssh_operations::run_ls_over_ssh(app.selected_ssh_host.clone(), app.rsync_remote_path.clone(), app.remote_autocomplet_tx.clone(), app.status_msgs_tx.clone());
         }
-    } else if file_list.len() == 1 && folder_list.len() == 0 {
-        let (parent_dir, _) = split_path(&app.rsync_remote_path);
-    
+    } else if file_list.len() == 1 && folder_list.len() == 0 {    
         app.rsync_remote_path = format!("{}{}", parent_dir, file_list[0]);
     
         app.remote_suggestions.folders.clear();
@@ -274,6 +313,11 @@ pub fn process_remote_suggestions(folder_list: Vec<String>, file_list: Vec<Strin
         }
     }
     else {
+        match path_char_autcomplete(folder_list.clone(), file_list.clone()) {
+            Some(new_prefix) => app.rsync_remote_path = parent_dir + &new_prefix,
+            None => {},
+        }
+        
         app.remote_suggestions.folders = folder_list;
         app.remote_suggestions.files = file_list;
     }
