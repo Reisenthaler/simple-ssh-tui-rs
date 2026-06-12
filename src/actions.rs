@@ -1,7 +1,8 @@
 use std::{ fs, str };
-use tracing::info;
 
-use crate::{app::{App, AppCommand::{self, Quit, StartSsh}, AppMode, RsyncActiveInput, StatusMsg, StatusMsgLevel::Error}, ssh_operations};
+use tracing::{error, info};
+
+use crate::{app::{App, AppCommand::{ Quit, StartSsh}, AppMode, RsyncActiveInput, StatusMsg, StatusMsgLevel::Error}, ssh_operations};
 
 pub enum Action {
     Quit,
@@ -65,12 +66,18 @@ fn handle_enter(app: &mut App) {
                     if ssh_operations::check_control_master(&app.selected_ssh_host) {
                         app.app_mode = AppMode::Rsync;
                     } else {
-                        app.status_msgs_tx.send(StatusMsg{ level: Error, msg: "failed to establisch control master".to_string() });
+                        match app.status_msgs_tx.send(StatusMsg{ level: Error, msg: "failed to establisch control master".to_string() }) {
+                            Ok(_) => info!("succsesfully sent status msg: \"failed to establisch control master\""),
+                            Err(e) => error!("failed to send status msg: \"failed to establisch control master\" with err: {}", e),
+                        }
                         app.app_mode = AppMode::SelectHost;
                     } 
                 },
                 Err(e) => {
-                    app.status_msgs_tx.send(StatusMsg{ level: Error, msg: format!("error while sending user input to portable_pty: {}", e.to_string()) });
+                    match app.status_msgs_tx.send(StatusMsg{ level: Error, msg: format!("error while sending user input to portable_pty: {}", e.to_string()) }) {
+                        Ok(_) => info!("succsesfully sent status msg: \"{}\"", format!("error while sending user input to portable_pty: {}", e.to_string())),
+                        Err(e) => error!("failed to send status msg: \"{}\" with err: {}",format!("error while sending user input to portable_pty: {}", e.to_string()), e),
+                    }
 
                 }
             }

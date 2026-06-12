@@ -16,9 +16,10 @@ use ssh_operations::{ start_ssh_process };
 use terminal::{ setup_terminal, restore_terminal_to_normal_mode };
 use ratatui::{ Terminal, backend::CrosstermBackend };
 use crate::app::StatusMsgLevel::{Error, Info};
-use crate::app::{ AppCommand, StatusMsg, StatusMsgLevel };
+use crate::app::{ AppCommand, StatusMsg };
 use crate::ssh_config::SshHost;
 use app::{ App, AppMode, RsyncStatus, RsyncActiveInput, SshEstablishControlMaster };
+
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
 
@@ -68,24 +69,22 @@ fn process_app_commands(app: &mut App, mut terminal: &mut Terminal<CrosstermBack
 }
 
 fn process_msgs_on_channels(app: &mut App) {
-        if let Ok(remote_suggestions) = app.remote_autocomplet_rx.try_recv() {
-            let (_, prefix) = split_path(&app.rsync_remote_path);
-            
+        if let Ok(remote_suggestions) = app.remote_autocomplet_rx.try_recv() {            
             actions::process_remote_suggestions(remote_suggestions.folders, remote_suggestions.files, app);
         }
 
         if let Ok(rsync_status) = app.rsync_rx.try_recv() {
             match rsync_status {
                 RsyncStatus::Progress(progress_msg) => {
-                  app.status_msgs_tx.send(StatusMsg {level: Info, msg: progress_msg});
+                    app.status_msg = StatusMsg { level: Info, msg: progress_msg };
 
                 },
                 RsyncStatus::Completed(exit_status) => {
-                    app.status_msgs_tx.send(StatusMsg {level: Info, msg: format!("rsync finished succsesfully status: {}", exit_status)});
+                    app.status_msg = StatusMsg { level: Info, msg: format!("rsync finished succsesfully status: {}", exit_status) };
 
                 },
                 RsyncStatus::Failed(err_msg) => {
-                    app.status_msgs_tx.send(StatusMsg {level: Error, msg: format!("rsync failed with error: {}", err_msg)});
+                    app.status_msg = StatusMsg { level: Error, msg: format!("rsync failed with error: {}", err_msg) };
                 }
             }
         }
@@ -109,20 +108,5 @@ fn process_msgs_on_channels(app: &mut App) {
        
         if let Ok(status_msg) = app.status_msgs_rx.try_recv() {
             app.status_msg = status_msg;
-        }
-       
-}
-
-fn split_path(input: &str) -> (String, String) {
-    if let Some(index) = input.rfind('/') {
-        let parent_dir = &input[..=index];
-        let prefix = &input[index + 1..];
-
-        let parent_dir = if parent_dir.is_empty() { "/".to_string() } else {
-            parent_dir.to_string()
-        };
-        (parent_dir, prefix.to_string())
-    } else {
-        ("./".to_string(), input.to_string())
-    }
+        }      
 }

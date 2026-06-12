@@ -1,12 +1,10 @@
 use std::{ fs, io::{ BufRead, BufReader }, path::{Path, PathBuf}, process::{ Command, Stdio }, sync::mpsc::{self, Receiver, Sender}, thread, time::Instant };
 use tracing::{ info, error };
 use portable_pty::{CommandBuilder, PtySize, native_pty_system};
-use crate::app::{StatusMsg, StatusMsgLevel::{Error, Info}, PathSuggestions };
+use crate::app::{PathSuggestions, SshEstablishControlMaster::Failure, StatusMsg, StatusMsgLevel::{Error, Info} };
 use crate::ssh_config::SshHost;
 use crate::RsyncStatus;
 use crate::app::{ SshEstablishControlMaster };
-
-type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
 pub enum TransferDirection {
     Download,
@@ -183,7 +181,9 @@ pub fn start_background_ssh(ssh_host: SshHost) -> (Sender<Vec<u8>>, Receiver<Ssh
     let (ssh_portable_pty_input_tx, ssh_portable_pty_input_rx) = mpsc::channel::<Vec<u8>>();
 
     if check_control_master(&ssh_host) {
-        ssh_portable_pty_output_tx.send(SshEstablishControlMaster::Succsess);
+        if let Err(e) = ssh_portable_pty_output_tx.send(SshEstablishControlMaster::Succsess) {
+            error!("failed to send msg on mpsc channel: {}", e)
+        }
         return (ssh_portable_pty_input_tx, ssh_portable_pty_output_rx);
     } else {
         remove_control_master(&ssh_host);
@@ -191,7 +191,7 @@ pub fn start_background_ssh(ssh_host: SshHost) -> (Sender<Vec<u8>>, Receiver<Ssh
     
     thread::spawn(move || {
         let pty_system = native_pty_system();
-        let mut pair = match pty_system.openpty(PtySize {
+        let pair = match pty_system.openpty(PtySize {
             rows: 24, 
             cols: 80, 
             pixel_width: 0, 
@@ -215,7 +215,14 @@ pub fn start_background_ssh(ssh_host: SshHost) -> (Sender<Vec<u8>>, Receiver<Ssh
         let mut cmd = CommandBuilder::new("ssh");
         cmd.args(ssh_args);
         
-        pair.slave.spawn_command(cmd);
+        if let Err(e) =  pair.slave.spawn_command(cmd) {
+            error!("failed to spawn ssh command on portable_pty: {}", e);
+            if let Err(e) = ssh_portable_pty_output_tx.send(Failure) {
+                error!("failed to send failure msg on mpsc channel: {}", e);
+            }
+        
+            return;
+        }
     
         let mut reader =  match pair.master.try_clone_reader() {
             Ok(p) => p,
@@ -235,11 +242,16 @@ pub fn start_background_ssh(ssh_host: SshHost) -> (Sender<Vec<u8>>, Receiver<Ssh
                     Ok(n) => {
                         let text: String = String::from_utf8_lossy(&buf[..n]).to_string();
                         if contains_paasswd_promt(&text) {
-                            ssh_portable_pty_output_tx.send(SshEstablishControlMaster::UserInputReqired);
+                            if let Err(e) = ssh_portable_pty_output_tx.send(SshEstablishControlMaster::UserInputReqired) {
+                                error!("failed to send msg on mpsc channel: {}", e)
+                            }
                         }
-                        ssh_portable_pty_output_tx.send(SshEstablishControlMaster::PasswordPromt(text));
+                        if let Err(e) = ssh_portable_pty_output_tx.send(SshEstablishControlMaster::PasswordPromt(text)) {
+                            error!("failed to send msg on mpsc channel: {}", e)
+                        }
                     },
                     Err(e) => {
+                        error!("failed read from portable_pty reader: {}", e);
                         break;
                     }
                 } 
