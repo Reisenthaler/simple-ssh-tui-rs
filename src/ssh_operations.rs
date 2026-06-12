@@ -44,7 +44,7 @@ pub fn run_rsync_process(ssh_host: SshHost, local_path: String, remote_path: Str
             "rsync"
         };
 
-        let ssh_rsh = format!("ssh {}", ssh_base_args(&ssh_host).join(" "));
+        let ssh_rsh = format!("ssh {} -o BatchMode=yes", ssh_base_args(&ssh_host).join(" "));
 
         let (source, destination) = match transfer_direction {
             TransferDirection::Download => {
