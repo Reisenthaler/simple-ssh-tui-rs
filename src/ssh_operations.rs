@@ -1,4 +1,4 @@
-use std::{ fs, io::{ BufRead, BufReader }, path::{Path, PathBuf}, process::{ Command, Stdio }, sync::mpsc::{self, Receiver, Sender}, thread, time::Instant };
+use std::{ fs, io::{ BufRead, BufReader }, path::{Path, PathBuf}, process::{ Command, Stdio }, sync::{ mpsc::{self, Receiver, Sender}, Arc, atomic::{ AtomicBool, Ordering }}, thread, time::Instant };
 use tracing::{ info, error };
 use portable_pty::{CommandBuilder, PtySize, native_pty_system};
 use crate::app::{PathSuggestions, SshEstablishControlMaster::Failure, StatusMsg, StatusMsgLevel::{Error, Info} };
@@ -6,6 +6,7 @@ use crate::ssh_config::SshHost;
 use crate::RsyncStatus;
 use crate::app::{ SshEstablishControlMaster };
 
+#[derive(Clone, Copy)]
 pub enum TransferDirection {
     Download,
     Upload
@@ -37,6 +38,20 @@ pub fn start_ssh_process(ssh_host: SshHost) {
 
 pub fn run_rsync_process(ssh_host: SshHost, local_path: String, remote_path: String, transfer_direction: TransferDirection, tx: mpsc::Sender<RsyncStatus>) {
     thread::spawn(move || {
+        run_rsync(ssh_host, local_path, remote_path, transfer_direction, tx);
+    });
+}
+
+pub fn run_rsync_proccess_continuously(ssh_host: SshHost, local_path: String, remote_path: String, transfer_direction: TransferDirection, tx: mpsc::Sender<RsyncStatus>, sync_active: Arc<AtomicBool>) {
+    thread::spawn(move || {
+        while sync_active.load(Ordering::Relaxed) {
+            run_rsync(ssh_host.clone(), local_path.clone(), remote_path.clone(), transfer_direction, tx.clone());        
+        }
+    });
+}
+
+fn run_rsync(ssh_host: SshHost, local_path: String, remote_path: String, transfer_direction: TransferDirection, tx: mpsc::Sender<RsyncStatus>) {
+        let start_time = Instant::now();
         let homebrew_rsync_path = "/opt/homebrew/bin/rsync";
         let rsyc_binary = if Path::new(homebrew_rsync_path).exists() {
             homebrew_rsync_path
@@ -48,10 +63,10 @@ pub fn run_rsync_process(ssh_host: SshHost, local_path: String, remote_path: Str
 
         let (source, destination) = match transfer_direction {
             TransferDirection::Download => {
-                (local_path, format!("{}:{}", ssh_host.host, remote_path))
+                (format!("{}:{}", ssh_host.host, remote_path), local_path)
             },
             TransferDirection::Upload => {
-                (format!("{}:{}", ssh_host.host, remote_path), local_path)
+                (local_path, format!("{}:{}", ssh_host.host, remote_path))
             }
         };
 
@@ -72,7 +87,7 @@ pub fn run_rsync_process(ssh_host: SshHost, local_path: String, remote_path: Str
         let mut child = match child {
             Ok(c) => c,
             Err(e) => {
-                let _ = tx.send(RsyncStatus::Failed(e.to_string()));
+                let _ = tx.send(RsyncStatus::Failed(e.to_string(), start_time.elapsed()));
                 return;
             }
         };
@@ -94,19 +109,17 @@ pub fn run_rsync_process(ssh_host: SshHost, local_path: String, remote_path: Str
             }
         }
 
-
         match child.wait() {
             Ok(status) if status.success() => {
-                let _ = tx.send(RsyncStatus::Completed(status));
+                let _ = tx.send(RsyncStatus::Completed(start_time.elapsed()));
+            },
+            Ok(status) => {
+                let _ = tx.send(RsyncStatus::Failed(format!("Rsync failed: {}", rsync_exit_msg(status.code().unwrap_or(100))), start_time.elapsed()));
             },
             _ => {
-                let _ = tx.send(RsyncStatus::Failed("Rsync failed with an error".to_string()));
-            }
-            
-            
+                let _ = tx.send(RsyncStatus::Failed("Rsync failed with an error, failed to get exit code".to_string(), start_time.elapsed()));
+            }   
         }
-
-    });
 }
 
 pub fn run_ls_over_ssh(ssh_host: SshHost, path_to_search: String, tx:  Sender<PathSuggestions>, status_msg_tx: Sender<StatusMsg>) {
@@ -337,4 +350,31 @@ fn control_path(ssh_host: &SshHost) -> PathBuf {
 
 fn contains_paasswd_promt(text: &String) -> bool {
     text.contains("pass") || text.contains("Pass")
+}
+
+
+fn rsync_exit_msg(exit_code: i32) -> &'static str {
+    match exit_code {
+        0 => "Success",
+        1 => "Syntax or usage error",
+        2 => "Protocol incompatibility",
+        3 => "Errors selecting input/output files, dirs",
+        4 => "Requested action not supported",
+        5 => "Error starting client-server protocol",
+        6 => "Daemon unable to append to log-file",
+        10 => "Error in socket I/O",
+        11 => "Error in file I/O",
+        12 => "Error in rsync protocol data stream",
+        13 => "Errors with program diagnostics",
+        14 => "Error in IPC code",
+        20 => "Received SIGUSR1 or SIGINT",
+        21 => "Some error returned by waitpid()",
+        22 => "Error allocating core memory buffers",
+        23 => "Partial transfer due to error",
+        24 => "Partial transfer due to vanished source files",
+        25 => "The --max-delete limit stopped deletions",
+        30 => "Timeout in data send/receive",
+        35 => "Timeout waiting for daemon connection",
+        _ => "Unknown rsync exit code",
+    }
 }

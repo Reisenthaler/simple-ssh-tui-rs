@@ -79,12 +79,12 @@ fn process_msgs_on_channels(app: &mut App) {
                     app.status_msg = StatusMsg { level: Info, msg: progress_msg };
 
                 },
-                RsyncStatus::Completed(exit_status) => {
-                    app.status_msg = StatusMsg { level: Info, msg: format!("rsync finished succsesfully status: {}", exit_status) };
+                RsyncStatus::Completed(duration) => {
+                    app.status_msg = StatusMsg { level: Info, msg: format!("rsync finished in {}ms", duration.as_millis()) };
 
                 },
-                RsyncStatus::Failed(err_msg) => {
-                    app.status_msg = StatusMsg { level: Error, msg: format!("rsync failed with error: {}", err_msg) };
+                RsyncStatus::Failed(err_msg, duration) => {
+                    app.status_msg = StatusMsg { level: Error, msg: format!("rsync failed after {}ms with error: {}", duration.as_millis(), err_msg) };
                 }
             }
         }

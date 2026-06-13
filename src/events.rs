@@ -11,8 +11,18 @@ pub fn key_to_action(key_event: KeyEvent) -> Option<Action> {
             Some(Action::ToggleAppMode)
         },
         KeyCode::Char('d') if key_event.modifiers.contains(KeyModifiers::CONTROL) => {
-            Some(Action::RsyncRemoteToLocal)
+            Some(Action::Download)
         },
+        KeyCode::Char('s') if key_event.modifiers.contains(KeyModifiers::CONTROL) => {
+            Some(Action::DownloadSync)
+        },
+        KeyCode::Char('u') if key_event.modifiers.contains(KeyModifiers::CONTROL) => {
+            Some(Action::Upload)
+        },
+        KeyCode::Char('z') if key_event.modifiers.contains(KeyModifiers::CONTROL) => {
+            Some(Action::UploadSync)
+        },
+        
         KeyCode::Up => Some(Action::MoveUp),
         KeyCode::Down => Some(Action::MoveDown),
         KeyCode::Tab => Some(Action::Tab),

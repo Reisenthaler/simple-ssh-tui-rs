@@ -1,4 +1,4 @@
-use std::{ fs, str };
+use std::{ fs, str, sync::atomic::Ordering };
 
 use tracing::{error, info};
 
@@ -13,7 +13,10 @@ pub enum Action {
     Enter,
     Backspace,
     Input(char),
-    RsyncRemoteToLocal,
+    Download,
+    DownloadSync,
+    Upload,
+    UploadSync,
 }
 
 pub fn handle_action(mut app: &mut App, action: Action) {
@@ -26,7 +29,10 @@ pub fn handle_action(mut app: &mut App, action: Action) {
         Action::Input(c) => handle_input(&mut app, c),
         Action::Backspace => handle_backspace(&mut app),
         Action::Tab => handle_tab(&mut app),
-        Action::RsyncRemoteToLocal => handle_rsync_remote_to_local(&app),
+        Action::Download => handle_download(&mut app),
+        Action::DownloadSync => handle_download_sync(&mut app),
+        Action::Upload => handle_upload(&app),
+        Action::UploadSync => handle_upload_sync(&app),
     }
 }
 
@@ -86,9 +92,34 @@ fn handle_enter(app: &mut App) {
     }
 }
 
-fn handle_rsync_remote_to_local(app: &App) {
-    // rsync remote -> local
+fn handle_download(app: &App) {
+    if app.app_mode == AppMode::Rsync {
+        ssh_operations::run_rsync_process(app.selected_ssh_host.clone(), app.rsync_local_path.clone(), app.rsync_remote_path.clone(), ssh_operations::TransferDirection::Download, app.rsync_tx.clone());
+    }
+}
+
+fn handle_download_sync(app: &App) {
+    if app.app_mode == AppMode::Rsync {
+        if app.sync_active.load(Ordering::Relaxed) {
+            app.sync_active.store(false, Ordering::Relaxed);
+        } else {
+            app.sync_active.store(true, Ordering::Relaxed);
+            ssh_operations::run_rsync_proccess_continuously(app.selected_ssh_host.clone(), app.rsync_local_path.clone(), app.rsync_remote_path.clone(), ssh_operations::TransferDirection::Download, app.rsync_tx.clone(), app.sync_active.clone());
+        }
+    } 
+}
+
+fn handle_upload(app: &App) {
     ssh_operations::run_rsync_process(app.selected_ssh_host.clone(), app.rsync_local_path.clone(), app.rsync_remote_path.clone(), ssh_operations::TransferDirection::Upload, app.rsync_tx.clone());
+}
+
+fn handle_upload_sync(app: &App) {
+    if app.sync_active.load(Ordering::Relaxed) {
+        app.sync_active.store(false, Ordering::Relaxed);
+    } else {
+        app.sync_active.store(true, Ordering::Relaxed);
+        ssh_operations::run_rsync_proccess_continuously(app.selected_ssh_host.clone(), app.rsync_local_path.clone(), app.rsync_remote_path.clone(), ssh_operations::TransferDirection::Upload, app.rsync_tx.clone(), app.sync_active.clone());
+    }
 }
 
 fn handle_move_up(app: &mut App) {

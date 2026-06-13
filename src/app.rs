@@ -1,4 +1,7 @@
+use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
 use std::sync::mpsc::{Receiver, Sender};
+use std::time::Duration;
 use std::{ env, sync::{ mpsc }, collections::VecDeque };
 use ratatui::{ widgets::ListState };
 use crate::SshHost;
@@ -23,8 +26,8 @@ pub enum RsyncActiveInput {
 #[derive(Debug, PartialEq)]
 pub enum RsyncStatus {
     Progress(String),
-    Completed(std::process::ExitStatus),
-    Failed(String),
+    Completed(Duration),
+    Failed(String, Duration),
 }
 
 pub enum AppCommand {
@@ -79,7 +82,7 @@ pub struct App {
     pub ssh_portable_pty_input_rx: Receiver<Vec<u8>>,
     pub ssh_login_output: String,
     pub ssh_login_input: String,
-    
+    pub sync_active: Arc<AtomicBool>,
 }
 
 pub fn init_app() -> Result<App> {
@@ -124,5 +127,6 @@ pub fn init_app() -> Result<App> {
         ssh_portable_pty_input_rx: ssh_portable_pty_input_rx,
         ssh_login_output: "".to_string(),
         ssh_login_input: "".to_string(),
+        sync_active: Arc::new(AtomicBool::new(false)),
     })
 }
