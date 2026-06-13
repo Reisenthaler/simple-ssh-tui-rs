@@ -65,6 +65,7 @@ pub fn draw_ui(terminal: &mut Terminal<CrosstermBackend<Stdout>>, app: &App) {
                 let vertical_chunks = Layout::default()
                     .direction(Direction::Vertical)
                     .constraints([
+                        Constraint::Length(1),
                         Constraint::Length(3),
                         Constraint::Min(0),
                     ])
@@ -78,9 +79,37 @@ pub fn draw_ui(terminal: &mut Terminal<CrosstermBackend<Stdout>>, app: &App) {
                         Constraint::Length(1),
                         Constraint::Length(1),
                     ])
-                    .split(vertical_chunks[0]);
+                    .split(vertical_chunks[1]);
 
-                  let local_path_input = Paragraph::new(format!("ssh host:    {} ", app.selected_ssh_host.host))
+
+                let key_combination_style = Style::default().fg(Color::Blue);
+                let action_style = Style::default().fg(Color::Magenta);
+                let divider_style = Style::default().fg(Color::DarkGray);
+                
+                let info_line = Line::from(vec![
+                    Span::styled("| ", divider_style),
+                    Span::styled("Download: ", action_style),
+                    Span::styled("CTRL + d", key_combination_style),
+                    Span::styled(" | ", divider_style),
+
+                    Span::styled("Download Sync: ", action_style),
+                    Span::styled("CTRL + s", key_combination_style),
+                    Span::styled(" | ", divider_style),  
+
+                    Span::styled("Upload: ", action_style),
+                    Span::styled("CTRL + u", key_combination_style),
+                    Span::styled(" | ", divider_style),  
+
+                    Span::styled("Upload Sync: ", action_style),
+                    Span::styled("CTRL + z", key_combination_style),
+                    Span::styled(" | ", divider_style),                ]);
+                let info_paragraph = Paragraph::new(info_line)
+                    .block(Block::default()
+                    .borders(Borders::NONE));
+
+                f.render_widget(info_paragraph, vertical_chunks[0]);
+                
+                let local_path_input = Paragraph::new(format!("ssh host:    {} ", app.selected_ssh_host.host))
                     .block(Block::default()
                     .borders(Borders::NONE));
 
@@ -117,11 +146,11 @@ pub fn draw_ui(terminal: &mut Terminal<CrosstermBackend<Stdout>>, app: &App) {
                 match app.rsync_active_input {
                     RsyncActiveInput::Local => {
                         let path_suggestions_paragraph = construct_path_suggestions_paragraph(&app.local_suggestions.folders, &app.local_suggestions.files);
-                        f.render_widget(path_suggestions_paragraph, vertical_chunks[1]);     
+                        f.render_widget(path_suggestions_paragraph, vertical_chunks[2]);     
                     },
                     RsyncActiveInput::Remote => {  
                         let path_suggestions_paragraph = construct_path_suggestions_paragraph(&app.remote_suggestions.folders, &app.remote_suggestions.files);
-                        f.render_widget(path_suggestions_paragraph, vertical_chunks[1]);        
+                        f.render_widget(path_suggestions_paragraph, vertical_chunks[2]);        
                     }
                 }
               
