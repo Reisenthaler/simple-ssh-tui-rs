@@ -72,7 +72,7 @@ pub fn draw_ui(terminal: &mut Terminal<CrosstermBackend<Stdout>>, app: &App) {
                     .split(main_chunks[0]);
 
 
-                let horizontal_chunks = Layout::default()
+                let paths_ssh_host_chunks = Layout::default()
                     .direction(Direction::Vertical)
                     .constraints([
                         Constraint::Length(1),                        
@@ -113,24 +113,24 @@ pub fn draw_ui(terminal: &mut Terminal<CrosstermBackend<Stdout>>, app: &App) {
                     .block(Block::default()
                     .borders(Borders::NONE));
 
-                f.render_widget(local_path_input, horizontal_chunks[0]);        
+                f.render_widget(local_path_input, paths_ssh_host_chunks[0]);        
 
                 let local_path_input = Paragraph::new(format!("Local Path:  {} ", app.rsync_local_path.to_string()))
                     .block(Block::default()
                         .borders(Borders::NONE));
-                f.render_widget(local_path_input, horizontal_chunks[01]);
+                f.render_widget(local_path_input, paths_ssh_host_chunks[01]);
                 
              
                 let remote_path_input = Paragraph::new(format!("Remote Path: {} ", app.rsync_remote_path.to_string()))
                     .block(Block::default()
                     .borders(Borders::NONE));
 
-                f.render_widget(remote_path_input, horizontal_chunks[2]);
+                f.render_widget(remote_path_input, paths_ssh_host_chunks[2]);
 
 
                 let active_chunk = match app.rsync_active_input {
-                    RsyncActiveInput::Local => horizontal_chunks[1],
-                    RsyncActiveInput::Remote => horizontal_chunks[2],
+                    RsyncActiveInput::Local => paths_ssh_host_chunks[1],
+                    RsyncActiveInput::Remote => paths_ssh_host_chunks[2],
                 };
 
                 let current_input_path_text_len = match app.rsync_active_input {
