@@ -133,7 +133,7 @@ pub fn run_ls_over_ssh(ssh_host: SshHost, path_to_search: String, tx:  Sender<Pa
         let output = Command::new("ssh")
             .args(ssh_base_args(&ssh_host))
             .args([
-                " -o", 
+                "-o", 
                 "BatchMode=yes",
             ])
             .arg(&ssh_host.host)
