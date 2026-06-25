@@ -125,10 +125,15 @@ fn handle_upload_sync(app: &App) {
 fn handle_move_up(app: &mut App) {
     match app.app_mode {
         AppMode::SelectHost => {
+            if app.get_filtered_ssh_hosts().len() == 0 {
+               app.ssh_hosts_list_state.select(None);
+               return;
+            }
+            
             let i = match app.ssh_hosts_list_state.selected() {
                 Some(i) => {
                     if i == 0 {
-                        app.ssh_hosts.len() - 1
+                        app.get_filtered_ssh_hosts().len() - 1
                     }
                     else {
                         i - 1
@@ -136,8 +141,7 @@ fn handle_move_up(app: &mut App) {
                 },
                 None => 0
             };
-            app.ssh_hosts_list_state.select(Some(i));  
-            set_selected_host(app);
+            set_selected_host(app, i);
         },
         AppMode::Rsync => {
             app.rsync_active_input = RsyncActiveInput::Local;
@@ -149,9 +153,14 @@ fn handle_move_up(app: &mut App) {
 fn handle_move_down(app: &mut App) {
     match app.app_mode {
         AppMode::SelectHost => {
+        if app.get_filtered_ssh_hosts().len() == 0 {
+           app.ssh_hosts_list_state.select(None);
+           return;
+        }
+            
          let i = match app.ssh_hosts_list_state.selected() {
              Some(i) => {
-                 if i >= app.ssh_hosts.len() - 1 {
+                 if i >= app.get_filtered_ssh_hosts().len() - 1 {
                      0
                  }
                  else {
@@ -160,8 +169,7 @@ fn handle_move_down(app: &mut App) {
              },
              None => 0
          };
-         app.ssh_hosts_list_state.select(Some(i));  
-         set_selected_host(app);
+         set_selected_host(app, i);
         },
         AppMode::Rsync => {
             app.rsync_active_input = RsyncActiveInput::Remote;
@@ -172,17 +180,28 @@ fn handle_move_down(app: &mut App) {
 }
 
 
-fn set_selected_host(app: &mut App) {
-    if let Some(index) = app.ssh_hosts_list_state.selected() {
-        if index < app.ssh_hosts.len() {
-            app.selected_ssh_host = app.ssh_hosts[index].clone()
-        }
-    } 
+fn set_selected_host(app: &mut App, index: usize) {
+    if app.get_filtered_ssh_hosts().len() == 0 {
+        app.ssh_hosts_list_state.select(None);
+    } else if index < app.get_filtered_ssh_hosts().len() {
+        app.ssh_hosts_list_state.select(Some(index));
+        app.selected_ssh_host = app.get_filtered_ssh_hosts()[index].clone()
+    }
 }
 
 fn handle_input(app: &mut App, c: char) {
    match app.app_mode {
-       AppMode::SelectHost => {},
+       AppMode::SelectHost => {
+           app.search_query.push(c);
+           if app.get_filtered_ssh_hosts().len() <= app.ssh_hosts_list_state.selected().unwrap_or(0) {
+               if app.get_filtered_ssh_hosts().len() > 0 {
+                   set_selected_host(app, app.get_filtered_ssh_hosts().len() - 1);
+               } else {
+                   app.ssh_hosts_list_state.select(None);
+               }
+               
+           }
+       },
        AppMode::Rsync => {
             match app.rsync_active_input {
                 RsyncActiveInput::Local => app.rsync_local_path.push(c),
@@ -197,7 +216,15 @@ fn handle_input(app: &mut App, c: char) {
 
 fn handle_backspace(app: &mut App) {
     match app.app_mode {
-        AppMode::SelectHost => {},
+        AppMode::SelectHost => { 
+            app.search_query.pop();
+
+            if app.get_filtered_ssh_hosts().len() > 0 {
+                set_selected_host(app, app.get_filtered_ssh_hosts().len() - 1);
+            } else {
+                app.ssh_hosts_list_state.select(None);
+            } 
+        },
         AppMode::Rsync => {
             match app.rsync_active_input {
                 RsyncActiveInput::Local => { app.rsync_local_path.pop(); },

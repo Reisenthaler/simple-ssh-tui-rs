@@ -24,26 +24,35 @@ pub fn draw_ui(terminal: &mut Terminal<CrosstermBackend<Stdout>>, app: &App) {
         
         match app.app_mode {
             AppMode::SelectHost => {
-                let chunks = Layout::default()
+                let chunks = if !app.search_query.is_empty() {
+                    Layout::default()
                     .direction(Direction::Vertical)
                     .constraints([
+                        Constraint::Max(1),
                         Constraint::Min(2),
                         Constraint::Length(8),
                     ])
-                    .split(main_chunks[0]);
-        
-        
-                let items: Vec<ListItem> = app.ssh_hosts
-                .iter()
-                .map(|host| {
-                    let display_text = match &host.host_name {
-                        Some(ip) => format!("{} ({})", host.host, ip),
-                        None => format!("{}", host.host)
-                    };
-                ListItem::new(display_text)
-                })
-                .collect();
-        
+                    .split(main_chunks[0])
+                } else {
+                    Layout::default()
+                        .direction(Direction::Vertical)
+                        .constraints([
+                            Constraint::Length(0),
+                            Constraint::Min(2),
+                            Constraint::Length(8),
+                        ])
+                        .split(main_chunks[0])
+                };
+
+                if !app.search_query.is_empty() {
+                    let search_query_paragraph = Paragraph::new(format!("search: {} ", app.search_query))
+                        .block(Block::default()
+                        .borders(Borders::NONE));
+                    f.render_widget(search_query_paragraph, chunks[0]);
+                }
+
+                let items: Vec<ListItem> = filer_ssh_hosts_for_search(&app);
+                
         
                 let list = List::new(items)
                 .block(Block::default().borders(Borders::NONE))
@@ -58,8 +67,8 @@ pub fn draw_ui(terminal: &mut Terminal<CrosstermBackend<Stdout>>, app: &App) {
                 let ssh_host_details = List::new(host_details)
                     .block(Block::default().borders(Borders::TOP).title("------- SSH Details "));
         
-                f.render_stateful_widget(list, chunks[0], &mut app.ssh_hosts_list_state.clone());
-                f.render_widget(ssh_host_details, chunks[1]);
+                f.render_stateful_widget(list, chunks[1], &mut app.ssh_hosts_list_state.clone());
+                f.render_widget(ssh_host_details, chunks[2]);
             }
             AppMode::Rsync => {
                 let vertical_chunks = Layout::default()
@@ -261,4 +270,18 @@ fn construct_path_suggestions_paragraph(folders: &[String], files: &[String] ) -
         .block(Block::default()
         .borders(Borders::ALL).title(" local "))
         .wrap(Wrap { trim: true })
+}
+
+
+fn filer_ssh_hosts_for_search<'a>(app: &App) -> Vec<ListItem<'a>> {
+    app.get_filtered_ssh_hosts()
+    .iter()
+    .map(|host| {
+        let display_text = match &host.host_name {
+            Some(ip) => format!("{} ({})", host.host, ip),
+            None => format!("{}", host.host)
+        };
+    ListItem::new(display_text)
+    })
+    .collect()
 }

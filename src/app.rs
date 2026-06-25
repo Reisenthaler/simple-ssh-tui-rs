@@ -83,6 +83,25 @@ pub struct App {
     pub ssh_login_output: String,
     pub ssh_login_input: String,
     pub sync_active: Arc<AtomicBool>,
+    pub search_query: String,
+}
+impl App {
+    pub fn get_filtered_ssh_hosts(&self) -> Vec<&SshHost>{
+        self.ssh_hosts
+            .iter()
+            .filter(|host| {
+                if self.search_query.is_empty() {
+                    true
+                } else {
+                    match &host.host_name {
+                        Some(host_name) => host.host.contains(&self.search_query) || host_name.contains(&self.search_query),
+                        None => host.host.contains(&self.search_query),
+                    }
+                    
+                }
+            })
+            .collect()
+    }
 }
 
 pub fn init_app() -> Result<App> {
@@ -128,5 +147,6 @@ pub fn init_app() -> Result<App> {
         ssh_login_output: "".to_string(),
         ssh_login_input: "".to_string(),
         sync_active: Arc::new(AtomicBool::new(false)),
+        search_query: "".to_string(),
     })
 }
