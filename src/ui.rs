@@ -4,7 +4,7 @@ use ratatui::{
     backend::CrosstermBackend, 
     layout::{ Constraint, Direction, Layout, Position }, 
     style::{ Color, Modifier, Style }, 
-    text::{ Span, Line }, 
+    text::{ Span, Line, Text }, 
     widgets::{ Block, Borders, List, ListItem, Paragraph, Wrap }
     };
 use tracing::error;
@@ -277,11 +277,21 @@ fn filer_ssh_hosts_for_search<'a>(app: &App) -> Vec<ListItem<'a>> {
     app.get_filtered_ssh_hosts()
     .iter()
     .map(|host| {
-        let display_text = match &host.host_name {
-            Some(ip) => format!("{} ({})", host.host, ip),
-            None => format!("{}", host.host)
-        };
-    ListItem::new(display_text)
+        let username = &host.user.clone().unwrap_or("".to_string());
+        let host_name = &host.host_name.clone().unwrap_or("".to_string());
+        let port = &host.port.clone().unwrap_or("".to_string());
+        
+    
+    ListItem::from(Line::from(vec![
+        Span::styled(host.host.clone(), Style::default().fg(Color::Magenta)),
+        Span::styled(" (", Style::default().fg(Color::DarkGray)),
+        Span::styled(username.clone(), Style::default().fg(Color::Green)),
+        Span::styled("@", Style::default().fg(Color::DarkGray)),
+        Span::styled(host_name.clone(), Style::default().fg(Color::LightBlue)),
+        Span::styled(":", Style::default().fg(Color::DarkGray)),
+        Span::styled(port.clone(), Style::default().fg(Color::Yellow)),
+        Span::styled(")", Style::default().fg(Color::DarkGray)),
+    ]))
     })
     .collect()
 }
