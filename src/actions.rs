@@ -190,17 +190,14 @@ fn set_selected_host(app: &mut App, index: usize) {
 }
 
 fn handle_input(app: &mut App, c: char) {
-   match app.app_mode {
-       AppMode::SelectHost => {
-           app.search_query.push(c);
-           if app.get_filtered_ssh_hosts().len() <= app.ssh_hosts_list_state.selected().unwrap_or(0) {
-               if app.get_filtered_ssh_hosts().len() > 0 {
-                   set_selected_host(app, app.get_filtered_ssh_hosts().len() - 1);
-               } else {
-                   app.ssh_hosts_list_state.select(None);
-               }
-               
-           }
+    match app.app_mode {
+        AppMode::SelectHost => {
+            app.search_query.push(c);
+            if app.get_filtered_ssh_hosts().len() > 0 {
+                set_selected_host(app, 0);
+            } else {
+                app.ssh_hosts_list_state.select(None);
+            }
        },
        AppMode::Rsync => {
             match app.rsync_active_input {
