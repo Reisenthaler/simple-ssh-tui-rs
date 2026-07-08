@@ -262,8 +262,7 @@ pub fn get_local_suggestions(app: &mut App) {
 
             let is_dir = entry.file_type().map(|ft| ft.is_dir()).unwrap_or(false);
           
-            
-            if file_name.to_lowercase().starts_with(&prefix.to_lowercase()) {
+            if file_name.starts_with(&prefix) {
                 match is_dir {
                     true => folder_list.push(file_name),
                     false => file_list.push(file_name),
