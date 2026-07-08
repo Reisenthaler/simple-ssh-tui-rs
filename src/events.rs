@@ -25,6 +25,8 @@ pub fn key_to_action(key_event: KeyEvent) -> Option<Action> {
         
         KeyCode::Up => Some(Action::MoveUp),
         KeyCode::Down => Some(Action::MoveDown),
+        KeyCode::Left => Some(Action::MoveLeft),
+        KeyCode::Right => Some(Action::MoveRight),
         KeyCode::Tab => Some(Action::Tab),
         KeyCode::Enter => Some(Action::Enter),
         KeyCode::Backspace => Some(Action::Backspace),

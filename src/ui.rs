@@ -143,8 +143,8 @@ pub fn draw_ui(terminal: &mut Terminal<CrosstermBackend<Stdout>>, app: &App) {
                 };
 
                 let current_input_path_text_len = match app.rsync_active_input {
-                    RsyncActiveInput::Local => app.rsync_local_path.len(),
-                    RsyncActiveInput::Remote => app.rsync_remote_path.len(),
+                    RsyncActiveInput::Local => app.rsync_local_path_cursor_pos,
+                    RsyncActiveInput::Remote => app.rsync_remote_path_cursor_pos,
                 };
 
                 f.set_cursor_position(Position::new(

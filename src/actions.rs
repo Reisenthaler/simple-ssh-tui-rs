@@ -9,6 +9,8 @@ pub enum Action {
     ToggleAppMode,
     MoveUp,
     MoveDown,
+    MoveLeft,
+    MoveRight,
     Tab,
     Enter,
     Backspace,
@@ -26,6 +28,8 @@ pub fn handle_action(mut app: &mut App, action: Action) {
         Action::Enter => handle_enter(&mut app),
         Action::MoveUp => handle_move_up(&mut app),
         Action::MoveDown => handle_move_down(&mut app),
+        Action::MoveLeft => handle_move_left(&mut app),
+        Action::MoveRight => handle_move_right(&mut app),
         Action::Input(c) => handle_input(&mut app, c),
         Action::Backspace => handle_backspace(&mut app),
         Action::Tab => handle_tab(&mut app),
@@ -179,6 +183,41 @@ fn handle_move_down(app: &mut App) {
     }
 }
 
+fn handle_move_left(app: &mut App) {
+    match app.app_mode {
+        AppMode::Rsync => {
+            match app.rsync_active_input {
+                RsyncActiveInput::Local => {
+                    app.rsync_local_path_cursor_pos = app.rsync_local_path_cursor_pos.saturating_sub(1);
+                },
+                RsyncActiveInput::Remote => {
+                    app.rsync_remote_path_cursor_pos = app.rsync_remote_path_cursor_pos.saturating_sub(1);
+                }
+            }
+        },
+        _ => {}
+    }
+}
+
+fn handle_move_right(app: &mut App) {
+    match app.app_mode {
+        AppMode::Rsync => {
+            match app.rsync_active_input {
+                RsyncActiveInput::Local => {
+                    if app.rsync_local_path_cursor_pos < app.rsync_local_path.len() {
+                        app.rsync_local_path_cursor_pos += 1;
+                    }
+                },
+                RsyncActiveInput::Remote => {
+                    if app.rsync_remote_path_cursor_pos < app.rsync_remote_path.len() {
+                        app.rsync_remote_path_cursor_pos += 1;
+                    }
+                }
+            }
+        },
+        _ => {}
+    }
+}
 
 fn set_selected_host(app: &mut App, index: usize) {
     if app.get_filtered_ssh_hosts().len() == 0 {
@@ -201,8 +240,14 @@ fn handle_input(app: &mut App, c: char) {
        },
        AppMode::Rsync => {
             match app.rsync_active_input {
-                RsyncActiveInput::Local => app.rsync_local_path.push(c),
-                RsyncActiveInput::Remote => app.rsync_remote_path.push(c),
+                RsyncActiveInput::Local => { 
+                    app.rsync_local_path.insert(app.rsync_local_path_cursor_pos, c); 
+                        app.rsync_local_path_cursor_pos += 1;
+                },
+                RsyncActiveInput::Remote => { 
+                    app.rsync_remote_path.insert(app.rsync_remote_path_cursor_pos, c);
+                    app.rsync_remote_path_cursor_pos += 1;
+                },
             }
        },
        AppMode::SshPasswordPromt => {
@@ -224,8 +269,14 @@ fn handle_backspace(app: &mut App) {
         },
         AppMode::Rsync => {
             match app.rsync_active_input {
-                RsyncActiveInput::Local => { app.rsync_local_path.pop(); },
-                RsyncActiveInput::Remote =>{ app.rsync_remote_path.pop(); },
+                RsyncActiveInput::Local => { 
+                    app.rsync_local_path.remove(app.rsync_local_path_cursor_pos - 1); 
+                    app.rsync_local_path_cursor_pos = app.rsync_local_path_cursor_pos.saturating_sub(1);
+                },
+                RsyncActiveInput::Remote =>{ 
+                    app.rsync_remote_path.remove(app.rsync_remote_path_cursor_pos - 1);
+                    app.rsync_remote_path_cursor_pos = app.rsync_remote_path_cursor_pos.saturating_sub(1);
+                },
             }
         },
         AppMode::SshPasswordPromt => { app.ssh_login_input.pop(); }
@@ -237,7 +288,6 @@ fn handle_tab(app: &mut App) {
         match app.rsync_active_input {
             RsyncActiveInput::Local => {         
                 get_local_suggestions(app);
-                
             },
             RsyncActiveInput::Remote => { 
                 let tx_clone = app.remote_autocomplet_tx.clone();
@@ -310,6 +360,11 @@ pub fn process_local_suggestions(folder_list: Vec<String>, file_list: Vec<String
         app.local_suggestions.folders = folder_list;
         app.local_suggestions.files = file_list;
     }
+
+    // if the cursor is at the end push it to the new end
+    if app.rsync_local_path_cursor_pos == old_local_path.len() {
+        app.rsync_local_path_cursor_pos = app.rsync_local_path.len();
+    }
 }
 
 
@@ -381,6 +436,11 @@ pub fn process_remote_suggestions(folder_list: Vec<String>, file_list: Vec<Strin
         
         app.remote_suggestions.folders = folder_list;
         app.remote_suggestions.files = file_list;
+    }
+
+    // if the cursor is at the end push it to the new end
+    if app.rsync_remote_path_cursor_pos == old_remote_path.len() {
+        app.rsync_remote_path_cursor_pos = app.rsync_remote_path.len();
     }
 }
 
