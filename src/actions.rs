@@ -2,7 +2,7 @@ use std::{ fs, str, sync::atomic::Ordering };
 
 use tracing::{error, info};
 
-use crate::{app::{App, AppCommand::{ Quit, StartSsh}, AppMode, RsyncActiveInput, StatusMsg, StatusMsgLevel::Error}, ssh_operations};
+use crate::{app::{App, AppCommand::{ Quit, StartSsh}, AppMode, RsyncActiveInput, StatusMsg, StatusMsgLevel::Error, filter_suggestions, PathSuggestions, LsCacheEntry }, ssh_operations };
 
 pub enum Action {
     Quit,
@@ -51,6 +51,8 @@ fn handle_toggle_app_mode(app: &mut App) {
             let (ssh_portable_pty_input_tx, ssh_portable_pty_output_rx) = ssh_operations::start_background_ssh(app.selected_ssh_host.clone());
             app.ssh_portable_pty_input_tx = ssh_portable_pty_input_tx;
             app.ssh_portable_pty_output_rx = ssh_portable_pty_output_rx;
+
+            app.remote_ls_cache = Vec::<LsCacheEntry>::new();
         },
         AppMode::Rsync => app.app_mode = AppMode::SelectHost,
         AppMode::SshPasswordPromt => {},
@@ -290,11 +292,19 @@ fn handle_tab(app: &mut App) {
                 get_local_suggestions(app);
             },
             RsyncActiveInput::Remote => { 
-                let tx_clone = app.remote_autocomplet_tx.clone();
-                let ssh_host = app.selected_ssh_host.clone();
-                let path_to_search = app.rsync_remote_path.clone();
+                let (parent_dir, _) = split_path(&app.rsync_remote_path);
+                
+                if let Some(cached_ls) = app.get_cached_ls(parent_dir) {
+                    info!("cached ls: {:?}", cached_ls);
 
-                ssh_operations::run_ls_over_ssh(ssh_host, path_to_search, tx_clone, app.status_msgs_tx.clone());
+                    process_remote_suggestions(cached_ls.clone(), app);
+                } else {
+                    let tx_clone = app.remote_autocomplet_tx.clone();
+                    let ssh_host = app.selected_ssh_host.clone();
+                    let path_to_search = app.rsync_remote_path.clone();
+           
+                    ssh_operations::run_ls_over_ssh(ssh_host, path_to_search, tx_clone, app.status_msgs_tx.clone());
+                }
             }  
         }
     }   
@@ -403,9 +413,15 @@ fn same_char_at(strings: &[String], position: usize) -> Option<char> {
 }
 
 
-pub fn process_remote_suggestions(folder_list: Vec<String>, file_list: Vec<String>, app: &mut App) {
+pub fn process_remote_suggestions(path_suggestions: PathSuggestions, app: &mut App) {
     let old_remote_path = app.rsync_remote_path.clone();
-    let (parent_dir, _) = split_path(&app.rsync_remote_path);
+    let (parent_dir, prefix) = split_path(&app.rsync_remote_path);
+
+    app.cache_ls(parent_dir.clone(), path_suggestions.clone());
+
+    let filtered_path_suggestions = filter_suggestions(&path_suggestions, &prefix);
+    let folder_list = filtered_path_suggestions.folders;
+    let file_list = filtered_path_suggestions.files;
     
     if folder_list.len() == 1 && file_list.len() == 0 {
         app.rsync_remote_path = format!("{}{}/", parent_dir, folder_list[0]);
@@ -415,7 +431,12 @@ pub fn process_remote_suggestions(folder_list: Vec<String>, file_list: Vec<Strin
 
         // path has changed -> get suggestions for new directory
         if app.rsync_remote_path != old_remote_path {
-            ssh_operations::run_ls_over_ssh(app.selected_ssh_host.clone(), app.rsync_remote_path.clone(), app.remote_autocomplet_tx.clone(), app.status_msgs_tx.clone());
+            let (new_parent_dir, _) = split_path(&app.rsync_remote_path);
+            if let Some(cached_ls) = app.get_cached_ls(new_parent_dir) {
+                process_remote_suggestions(cached_ls.clone(), app);
+            } else {
+                ssh_operations::run_ls_over_ssh(app.selected_ssh_host.clone(), app.rsync_remote_path.clone(), app.remote_autocomplet_tx.clone(), app.status_msgs_tx.clone());
+            }
         }
     } else if file_list.len() == 1 && folder_list.len() == 0 {    
         app.rsync_remote_path = format!("{}{}", parent_dir, file_list[0]);
@@ -425,17 +446,19 @@ pub fn process_remote_suggestions(folder_list: Vec<String>, file_list: Vec<Strin
 
         // path has changed -> get suggestions for new directory
         if app.rsync_remote_path != old_remote_path {
-            ssh_operations::run_ls_over_ssh(app.selected_ssh_host.clone(), app.rsync_remote_path.clone(), app.remote_autocomplet_tx.clone(), app.status_msgs_tx.clone());
+            process_remote_suggestions(path_suggestions, app);
         }
     }
     else {
         match path_char_autcomplete(folder_list.clone(), file_list.clone()) {
-            Some(new_prefix) => app.rsync_remote_path = parent_dir + &new_prefix,
+            Some(new_prefix) => app.rsync_remote_path = "".to_string() + &parent_dir + &new_prefix,
             None => {},
         }
         
-        app.remote_suggestions.folders = folder_list;
+        app.remote_suggestions.folders = folder_list.clone();
         app.remote_suggestions.files = file_list;
+
+        prefetch_remote_subdirs(app, folder_list, &parent_dir);
     }
 
     // if the cursor is at the end push it to the new end
@@ -444,7 +467,7 @@ pub fn process_remote_suggestions(folder_list: Vec<String>, file_list: Vec<Strin
     }
 }
 
-fn split_path(input: &str) -> (String, String) {
+pub fn split_path(input: &str) -> (String, String) {
     if let Some(index) = input.rfind('/') {
         let parent_dir = &input[..=index];
         let prefix = &input[index + 1..];
@@ -455,5 +478,16 @@ fn split_path(input: &str) -> (String, String) {
         (parent_dir, prefix.to_string())
     } else {
         ("./".to_string(), input.to_string())
+    }
+}
+
+fn prefetch_remote_subdirs(app: &App, folder_list: Vec<String>, parent_dir: &str) {
+    for folder in folder_list.iter().take(15)  {
+        let child_path = format!("{}{}/", parent_dir, &folder);
+        if app.get_cached_ls(child_path.clone()).is_some() {
+            continue;
+        }
+
+        ssh_operations::run_ls_over_ssh(app.selected_ssh_host.clone(), child_path, app.remote_autocomplet_tx.clone(), app.status_msgs_tx.clone());
     }
 }

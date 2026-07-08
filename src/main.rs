@@ -80,8 +80,15 @@ fn process_app_commands(app: &mut App, mut terminal: &mut Terminal<CrosstermBack
 }
 
 fn process_msgs_on_channels(app: &mut App) {
-        if let Ok(remote_suggestions) = app.remote_autocomplet_rx.try_recv() {            
-            actions::process_remote_suggestions(remote_suggestions.folders, remote_suggestions.files, app);
+        if let Ok(remote_ls_result) = app.remote_autocomplet_rx.try_recv() {  
+            let (current_remote_dir, _) =  actions::split_path(&app.rsync_remote_path);
+            let (remote_dir, _) = actions::split_path(&remote_ls_result.path);
+            if current_remote_dir == remote_dir {
+                actions::process_remote_suggestions(remote_ls_result.suggestions, app);
+            } else {
+                app.cache_ls(remote_dir, remote_ls_result.suggestions);
+            }
+            
         }
 
         if let Ok(rsync_status) = app.rsync_rx.try_recv() {

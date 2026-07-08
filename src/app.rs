@@ -1,7 +1,7 @@
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 use std::sync::mpsc::{Receiver, Sender};
-use std::time::Duration;
+use std::time::{ Duration, Instant };
 use std::{ env, sync::{ mpsc }, collections::VecDeque };
 use std::path::PathBuf;
 use ratatui::{ widgets::ListState };
@@ -54,9 +54,20 @@ pub struct StatusMsg {
     pub msg: String,
 }
 
+#[derive(Debug, Clone)]
 pub struct PathSuggestions {
     pub folders: Vec<String>,
     pub files: Vec<String>
+}
+
+pub struct LsCacheEntry {
+    pub parent_dir: String,
+    pub path_suggestions: PathSuggestions,
+    pub timestamp: Instant,
+}
+pub struct RemoteLsResult {
+    pub path: String,
+    pub suggestions: PathSuggestions,
 }
 
 pub struct App {
@@ -71,11 +82,12 @@ pub struct App {
     pub rsync_remote_path_cursor_pos: usize,
     pub local_suggestions: PathSuggestions,
     pub remote_suggestions: PathSuggestions,
+    pub remote_ls_cache: Vec<LsCacheEntry>,
     pub status_msgs_tx: Sender<StatusMsg>,
     pub status_msgs_rx: Receiver<StatusMsg>,
     pub status_msg: StatusMsg,
-    pub remote_autocomplet_tx: Sender<PathSuggestions>,
-    pub remote_autocomplet_rx: Receiver<PathSuggestions>,
+    pub remote_autocomplet_tx: Sender<RemoteLsResult>,
+    pub remote_autocomplet_rx: Receiver<RemoteLsResult>,
     pub rsync_tx: Sender<RsyncStatus>,
     pub rsync_rx: Receiver<RsyncStatus>,
     pub commands: VecDeque<AppCommand>,
@@ -106,6 +118,22 @@ impl App {
             })
             .collect()
     }
+
+
+    pub fn cache_ls(&mut self, parent_dir: String, path_suggestions: PathSuggestions) {
+        self.remote_ls_cache.retain(|entry| entry.parent_dir != parent_dir);
+        self.remote_ls_cache.push(LsCacheEntry { 
+            parent_dir, 
+            path_suggestions, 
+            timestamp: Instant::now(), 
+        });
+    }
+
+    pub fn get_cached_ls(&self, parent_dir: String) -> Option<&PathSuggestions> {
+        self.remote_ls_cache.iter()
+            .find(|entry| entry.parent_dir == parent_dir)
+            .map(|entry| &entry.path_suggestions)
+    }
 }
 
 pub fn init_app() -> Result<App> {
@@ -115,7 +143,7 @@ pub fn init_app() -> Result<App> {
     let mut list_state = ListState::default();
     list_state.select(Some(0));
 
-    let (remote_autocomplet_tx, remote_autocomplet_rx) = mpsc::channel::<PathSuggestions>();
+    let (remote_autocomplet_tx, remote_autocomplet_rx) = mpsc::channel::<RemoteLsResult>();
     let (rsync_tx, rsync_rx) = mpsc::channel::<RsyncStatus>();
     let (ssh_portable_pty_output_tx, ssh_portable_pty_output_rx) = mpsc::channel::<SshEstablishControlMaster>();
     let (ssh_portable_pty_input_tx, ssh_portable_pty_input_rx) = mpsc::channel::<Vec<u8>>();
@@ -141,6 +169,7 @@ pub fn init_app() -> Result<App> {
         status_msg: status_msg,
         local_suggestions: local_suggestions,
         remote_suggestions: remote_suggestions,
+        remote_ls_cache: Vec::<LsCacheEntry>::new(),
         remote_autocomplet_tx: remote_autocomplet_tx,
         remote_autocomplet_rx: remote_autocomplet_rx,
         rsync_tx: rsync_tx,
@@ -156,4 +185,17 @@ pub fn init_app() -> Result<App> {
         search_query: "".to_string(),
         rsync_path: None,
     })
+}
+
+pub fn filter_suggestions(suggestions: &PathSuggestions, prefix: &str) -> PathSuggestions {
+    PathSuggestions { 
+        folders: suggestions.folders.iter()
+            .filter(|f| f.starts_with(prefix))
+            .cloned()
+            .collect(), 
+        files: suggestions.files.iter()
+            .filter(|f| f.starts_with(prefix))
+            .cloned()
+            .collect()
+    }
 }
