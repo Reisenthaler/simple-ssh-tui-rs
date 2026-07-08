@@ -4,7 +4,7 @@ use ratatui::{
     backend::CrosstermBackend, 
     layout::{ Constraint, Direction, Layout, Position }, 
     style::{ Color, Modifier, Style }, 
-    text::{ Span, Line, Text }, 
+    text::{ Span, Line }, 
     widgets::{ Block, Borders, List, ListItem, Paragraph, Wrap }
     };
 use tracing::error;

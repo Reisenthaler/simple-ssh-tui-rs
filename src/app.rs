@@ -3,6 +3,7 @@ use std::sync::atomic::AtomicBool;
 use std::sync::mpsc::{Receiver, Sender};
 use std::time::Duration;
 use std::{ env, sync::{ mpsc }, collections::VecDeque };
+use std::path::PathBuf;
 use ratatui::{ widgets::ListState };
 use crate::SshHost;
 use crate::app::StatusMsgLevel::Info;
@@ -84,6 +85,7 @@ pub struct App {
     pub ssh_login_input: String,
     pub sync_active: Arc<AtomicBool>,
     pub search_query: String,
+    pub rsync_path: Option<PathBuf>
 }
 impl App {
     pub fn get_filtered_ssh_hosts(&self) -> Vec<&SshHost>{
@@ -148,5 +150,6 @@ pub fn init_app() -> Result<App> {
         ssh_login_input: "".to_string(),
         sync_active: Arc::new(AtomicBool::new(false)),
         search_query: "".to_string(),
+        rsync_path: None,
     })
 }

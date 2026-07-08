@@ -36,25 +36,25 @@ pub fn start_ssh_process(ssh_host: SshHost) {
         }
 }
 
-pub fn run_rsync_process(ssh_host: SshHost, local_path: String, remote_path: String, transfer_direction: TransferDirection, tx: mpsc::Sender<RsyncStatus>) {
+pub fn run_rsync_process(rsync_path: Option<PathBuf>, ssh_host: SshHost, local_path: String, remote_path: String, transfer_direction: TransferDirection, tx: mpsc::Sender<RsyncStatus>) {
     thread::spawn(move || {
-        run_rsync(ssh_host, local_path, remote_path, transfer_direction, tx);
+        run_rsync(rsync_path.clone(), ssh_host, local_path, remote_path, transfer_direction, tx);
     });
 }
 
-pub fn run_rsync_proccess_continuously(ssh_host: SshHost, local_path: String, remote_path: String, transfer_direction: TransferDirection, tx: mpsc::Sender<RsyncStatus>, sync_active: Arc<AtomicBool>) {
+pub fn run_rsync_proccess_continuously(rsync_path: Option<PathBuf>, ssh_host: SshHost, local_path: String, remote_path: String, transfer_direction: TransferDirection, tx: mpsc::Sender<RsyncStatus>, sync_active: Arc<AtomicBool>) {
     thread::spawn(move || {
         while sync_active.load(Ordering::Relaxed) {
-            run_rsync(ssh_host.clone(), local_path.clone(), remote_path.clone(), transfer_direction, tx.clone());        
+            run_rsync(rsync_path.clone(), ssh_host.clone(), local_path.clone(), remote_path.clone(), transfer_direction, tx.clone());        
         }
     });
 }
 
-fn run_rsync(ssh_host: SshHost, local_path: String, remote_path: String, transfer_direction: TransferDirection, tx: mpsc::Sender<RsyncStatus>) {
+fn run_rsync(rsync_path: Option<PathBuf>, ssh_host: SshHost, local_path: String, remote_path: String, transfer_direction: TransferDirection, tx: mpsc::Sender<RsyncStatus>) {
         let start_time = Instant::now();
-        let homebrew_rsync_path = "/opt/homebrew/bin/rsync";
-        let rsyc_binary = if Path::new(homebrew_rsync_path).exists() {
-            homebrew_rsync_path
+
+        let rsyc_binary = if let Some(path) = rsync_path {
+            &path.to_string_lossy().to_string()
         } else {
             "rsync"
         };
