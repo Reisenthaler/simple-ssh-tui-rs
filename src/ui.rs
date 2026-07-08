@@ -17,7 +17,7 @@ pub fn draw_ui(terminal: &mut Terminal<CrosstermBackend<Stdout>>, app: &App) {
         let main_chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
-                Constraint::Min(10),
+                Constraint::Min(4),
                 Constraint::Length(1),
             ])
             .split(f.area());
