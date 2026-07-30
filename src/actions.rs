@@ -272,12 +272,16 @@ fn handle_backspace(app: &mut App) {
         AppMode::Rsync => {
             match app.rsync_active_input {
                 RsyncActiveInput::Local => { 
-                    app.rsync_local_path.remove(app.rsync_local_path_cursor_pos - 1); 
-                    app.rsync_local_path_cursor_pos = app.rsync_local_path_cursor_pos.saturating_sub(1);
+                    if app.rsync_local_path_cursor_pos > 0 {
+                        app.rsync_local_path.remove(app.rsync_local_path_cursor_pos.saturating_sub(1)); 
+                        app.rsync_local_path_cursor_pos = app.rsync_local_path_cursor_pos.saturating_sub(1);     
+                    }
                 },
-                RsyncActiveInput::Remote =>{ 
-                    app.rsync_remote_path.remove(app.rsync_remote_path_cursor_pos - 1);
-                    app.rsync_remote_path_cursor_pos = app.rsync_remote_path_cursor_pos.saturating_sub(1);
+                RsyncActiveInput::Remote => { 
+                    if app.rsync_remote_path_cursor_pos > 0 {
+                        app.rsync_remote_path.remove(app.rsync_remote_path_cursor_pos.saturating_sub(1));
+                        app.rsync_remote_path_cursor_pos = app.rsync_remote_path_cursor_pos.saturating_sub(1);
+                    }
                 },
             }
         },
