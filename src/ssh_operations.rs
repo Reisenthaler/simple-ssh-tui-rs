@@ -137,7 +137,7 @@ pub fn run_ls_over_ssh(ssh_host: SshHost, path_to_search: String, tx:  Sender<Re
                 "BatchMode=yes",
             ])
             .arg(&ssh_host.host)
-            .arg(format!("ls -p {}", parent_dir))
+            .arg(format!("ls -Ap {}", parent_dir))
             .output();
 
         if let Ok(out) = output && out.status.success() {
