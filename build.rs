@@ -26,7 +26,7 @@ fn main() {
 fn get_rsync_binary_name(target: &str) -> String {
     match target {
         t if t.contains("aarch64-apple-darwin") => "rsync-macos-aarch64".to_string(),
-
+        t if t.contains("x86_64-unknown-linux") => "rsync-linux-x86".to_string(),
         _ => panic!("no rsync binary for tharget: {} exists", target)
     }
 }
