@@ -3,6 +3,7 @@ use std::{ time::Duration,  io::Stdout, process, path::PathBuf, fs, os::unix::fs
 use crossterm::event::{ self, Event };
 use beautiful_log;
 use tracing::{ info, error };
+use directories::ProjectDirs;
 
 mod actions;
 mod app;
@@ -26,7 +27,7 @@ type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 const RSYNC_BYTES: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/rsync-binary" ));
 
 fn main() -> Result<()> {
-    beautiful_log::init_logging("debug", beautiful_log::LogTarget::File, Some("simple-ssh-tui-rs.log"));
+    beautiful_log::init_logging("debug", beautiful_log::LogTarget::File, Some(&log_dir("simple-ssh-tui-rs")));
 
     let mut app = app::init_app().unwrap();
 
@@ -154,4 +155,30 @@ fn prepare_rsync_binary() -> Result<PathBuf>{
 
     info!("rsync path: {}", rsync_path.display());
     Ok(rsync_path)
+}
+
+
+fn log_dir(app_name: &str) -> String {
+    if let Some(project_dir) = ProjectDirs::from("com", "reisenthaler", app_name) {
+        let log_dir = project_dir.data_local_dir();
+
+        if let Err(e) = std::fs::create_dir_all(log_dir) {
+            error!("failed to create: {}, error: {}", log_dir.display(), e);
+            return "simple-ssh-tui-rs.log".to_string();
+        }
+        
+        let log_file_path = log_dir.join(format!("{app_name}.log"));
+
+        match log_file_path.to_str() {
+            Some(str) => {
+                return str.to_string();
+            },
+            None => {
+                error!("failed to convert log file path to String");
+                return "simple-ssh-tui-rs.log".to_string();
+            }
+        }    
+    }
+   
+    return "simple-ssh-tui-rs.log".to_string(); 
 }
