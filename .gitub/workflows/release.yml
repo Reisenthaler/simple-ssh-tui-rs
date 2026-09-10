@@ -2,7 +2,7 @@ name: Build & Release
 
 on:
   push:
-    branches: [main]
+    branches: [github-workflow]
     tags: ["v*.*.*"]
   pull_request:
     branches: [main]
