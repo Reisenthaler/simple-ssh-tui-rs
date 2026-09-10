@@ -53,26 +53,20 @@ jobs:
 
       - name: Build
         run: cargo build --release --locked --target ${{ matrix.target }}
-
-      - name: Package binary
+      - name: Rename binary for release
         shell: bash
         run: |
           set -euo pipefail
-          staging="${BIN_NAME}-${{ matrix.target }}"
-          mkdir -p "$staging"
-          cp "target/${{ matrix.target }}/release/${BIN_NAME}" "$staging/"
-          cp README.md "$staging/" 2>/dev/null || true
-          cp LICENSE "$staging/" 2>/dev/null || true
-          tar -czf "${staging}.tar.gz" "$staging"
-          shasum -a 256 "${staging}.tar.gz" > "${staging}.tar.gz.sha256"
-
+          out_name="${BIN_NAME}-${{ matrix.target }}"
+          cp "target/${{ matrix.target }}/release/${BIN_NAME}" "$out_name"
+          shasum -a 256 "$out_name" > "${out_name}.sha256"
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ env.BIN_NAME }}-${{ matrix.target }}
           path: |
-            ${{ env.BIN_NAME }}-${{ matrix.target }}.tar.gz
-            ${{ env.BIN_NAME }}-${{ matrix.target }}.tar.gz.sha256
+            ${{ env.BIN_NAME }}-${{ matrix.target }}
+            ${{ env.BIN_NAME }}-${{ matrix.target }}.sha256
           if-no-files-found: error
 
   release:
