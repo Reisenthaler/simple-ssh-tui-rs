@@ -62,72 +62,72 @@ fn main() -> Result<()> {
 }
 
 fn process_app_commands(app: &mut App, mut terminal: &mut Terminal<CrosstermBackend<Stdout>>) -> Result<()> {
-        while let Some(cmd) = app.commands.pop_front() {
-            match cmd {
-                AppCommand::Quit => {
-                    restore_terminal_to_normal_mode(&mut terminal)?;
-                    process::exit(0);
-                },
-                AppCommand::StartSsh => {
-                    restore_terminal_to_normal_mode(&mut terminal)?;
-                    
-                    start_ssh_process(app.selected_ssh_host.clone());
-                    process::exit(0);
-                },
-            }
+    while let Some(cmd) = app.commands.pop_front() {
+        match cmd {
+            AppCommand::Quit => {
+                restore_terminal_to_normal_mode(&mut terminal)?;
+                process::exit(0);
+            },
+            AppCommand::StartSsh => {
+                restore_terminal_to_normal_mode(&mut terminal)?;
+                
+                start_ssh_process(app.selected_ssh_host.clone());
+                process::exit(0);
+            },
         }
+    }
         
-        Ok(())
+    Ok(())
 }
 
 fn process_msgs_on_channels(app: &mut App) {
-        if let Ok(remote_ls_result) = app.remote_autocomplet_rx.try_recv() {  
-            let (current_remote_dir, _) =  actions::split_path(&app.rsync_remote_path);
-            let (remote_dir, _) = actions::split_path(&remote_ls_result.path);
-            if current_remote_dir == remote_dir {
-                actions::process_remote_suggestions(remote_ls_result.suggestions, app);
-            } else {
-                app.cache_ls(remote_dir, remote_ls_result.suggestions);
-            }
-            
+    if let Ok(remote_ls_result) = app.remote_autocomplet_rx.try_recv() {  
+        let (current_remote_dir, _) =  actions::split_path(&app.rsync_remote_path);
+        let (remote_dir, _) = actions::split_path(&remote_ls_result.path);
+        if current_remote_dir == remote_dir {
+            actions::process_remote_suggestions(remote_ls_result.suggestions, app);
+        } else {
+            app.cache_ls(remote_dir, remote_ls_result.suggestions);
         }
+    
+    }
 
-        if let Ok(rsync_status) = app.rsync_rx.try_recv() {
-            match rsync_status {
-                RsyncStatus::Progress(progress_msg) => {
-                    app.status_msg = StatusMsg { level: Info, msg: progress_msg };
+    if let Ok(rsync_status) = app.rsync_rx.try_recv() {
+        match rsync_status {
+            RsyncStatus::Progress(progress_msg) => {
+                app.status_msg = StatusMsg { level: Info, msg: progress_msg };
 
-                },
-                RsyncStatus::Completed(duration) => {
-                    app.status_msg = StatusMsg { level: Info, msg: format!("rsync finished in {}ms", duration.as_millis()) };
+            },
+            RsyncStatus::Completed(duration) => {
+                app.status_msg = StatusMsg { level: Info, msg: format!("rsync finished in {}ms", duration.as_millis()) };
 
-                },
-                RsyncStatus::Failed(err_msg, duration) => {
-                    app.status_msg = StatusMsg { level: Error, msg: format!("rsync failed after {}ms with error: {}", duration.as_millis(), err_msg) };
-                }
-            }
-        }
-
-        if let Ok(ssh_login_output) = app.ssh_portable_pty_output_rx.try_recv() {
-            match ssh_login_output {
-                SshEstablishControlMaster::Succsess => {
-                    app.app_mode = AppMode::Rsync;
-                },
-                SshEstablishControlMaster::Failure => {
-                    app.app_mode = AppMode::SelectHost;
-                },
-                SshEstablishControlMaster::PasswordPromt(text) => {
-                    app.ssh_login_output.push_str(&text);
-                },
-                SshEstablishControlMaster::UserInputReqired => {
-                    app.app_mode = AppMode::SshPasswordPromt;
-                }
+            },
+            RsyncStatus::Failed(err_msg, duration) => {
+                app.status_msg = StatusMsg { level: Error, msg: format!("rsync failed after {}ms with error: {}", duration.as_millis(), err_msg) };
             }
         }
+    }
+
+    if let Ok(ssh_login_output) = app.ssh_portable_pty_output_rx.try_recv() {
+        match ssh_login_output {
+            SshEstablishControlMaster::Succsess => {
+                app.app_mode = AppMode::Rsync;
+            },
+            SshEstablishControlMaster::Failure => {
+                app.app_mode = AppMode::SelectHost;
+            },
+            SshEstablishControlMaster::PasswordPromt(text) => {
+                app.ssh_login_output.push_str(&text);
+            },
+            SshEstablishControlMaster::UserInputReqired => {
+                app.app_mode = AppMode::SshPasswordPromt;
+            }
+        }
+    }
        
-        if let Ok(status_msg) = app.status_msgs_rx.try_recv() {
-            app.status_msg = status_msg;
-        }      
+    if let Ok(status_msg) = app.status_msgs_rx.try_recv() {
+        app.status_msg = status_msg;
+    }      
 }
 
 
