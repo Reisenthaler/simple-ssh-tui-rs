@@ -1,7 +1,21 @@
-use std::{ fs, io::{ BufRead, BufReader }, path::{Path, PathBuf}, process::{ Command, Stdio }, sync::{ mpsc::{self, Receiver, Sender}, Arc, atomic::{ AtomicBool, Ordering }}, thread, time::Instant };
+use std::{ 
+    fs, 
+    io::{ BufRead, BufReader }, 
+    path::{ PathBuf}, 
+    process::{ Command, Stdio }, 
+    sync::{ mpsc::{self, Receiver, Sender}, Arc, atomic::{ AtomicBool, Ordering } }, 
+    thread, 
+    time::{ Instant, Duration }
+};
 use tracing::{ info, error };
 use portable_pty::{CommandBuilder, PtySize, native_pty_system};
-use crate::app::{PathSuggestions, RemoteLsResult, SshEstablishControlMaster::Failure, StatusMsg, StatusMsgLevel::{Error, Info} };
+use crate::app::{
+    PathSuggestions, 
+    RemoteLsResult, 
+    SshEstablishControlMaster::Failure, 
+    StatusMsg, 
+    StatusMsgLevel::{Error, Info} 
+};
 use crate::ssh_config::SshHost;
 use crate::RsyncStatus;
 use crate::app::{ SshEstablishControlMaster };
@@ -44,8 +58,14 @@ pub fn run_rsync_process(rsync_path: Option<PathBuf>, ssh_host: SshHost, local_p
 
 pub fn run_rsync_proccess_continuously(rsync_path: Option<PathBuf>, ssh_host: SshHost, local_path: String, remote_path: String, transfer_direction: TransferDirection, tx: mpsc::Sender<RsyncStatus>, sync_active: Arc<AtomicBool>) {
     thread::spawn(move || {
+        
         while sync_active.load(Ordering::Relaxed) {
+            let start_time = Instant::now();
             run_rsync(rsync_path.clone(), ssh_host.clone(), local_path.clone(), remote_path.clone(), transfer_direction, tx.clone());        
+            
+            while start_time.elapsed() < Duration::from_secs(3) {
+                thread::sleep(Duration::from_millis(10));
+            }
         }
     });
 }
