@@ -1,8 +1,10 @@
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 use std::sync::mpsc::{Receiver, Sender};
-use std::time::{ Duration, Instant };
+use std::time::{ Duration, Instant, SystemTime, UNIX_EPOCH };
 use std::{ env, sync::{ mpsc }, collections::VecDeque };
+use std::collections::hash_map::DefaultHasher;
+use std::hash::{ Hash, Hasher };
 use std::path::PathBuf;
 use ratatui::{ widgets::ListState };
 use crate::SshHost;
@@ -99,7 +101,8 @@ pub struct App {
     pub ssh_login_input: String,
     pub sync_active: Arc<AtomicBool>,
     pub search_query: String,
-    pub rsync_path: Option<PathBuf>
+    pub rsync_path: Option<PathBuf>,
+    pub session_seed: u64
 }
 impl App {
     pub fn get_filtered_ssh_hosts(&self) -> Vec<&SshHost>{
@@ -184,6 +187,7 @@ pub fn init_app() -> Result<App> {
         sync_active: Arc::new(AtomicBool::new(false)),
         search_query: "".to_string(),
         rsync_path: None,
+        session_seed: generate_session_seed()
     })
 }
 
@@ -198,4 +202,17 @@ pub fn filter_suggestions(suggestions: &PathSuggestions, prefix: &str) -> PathSu
             .cloned()
             .collect()
     }
+}
+
+fn generate_session_seed() -> u64 {
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_nanos() as u64)
+        .unwrap_or(0);
+
+    let mut hasher = DefaultHasher::new();
+
+    nanos.hash(&mut hasher);
+
+    hasher.finish()
 }

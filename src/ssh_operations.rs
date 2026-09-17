@@ -26,27 +26,118 @@ pub enum TransferDirection {
     Upload
 }
 
-pub fn start_ssh_process(ssh_host: SshHost) {
+const SSH_CONNECTION_ERROR: i32 = 255;
+
+fn shell_quote(s: &str) -> String {
+    format!("'{}'", s.replace('\'', "'\\''"))
+}
+
+
+fn tmux_session_name(seed: u64) -> String {
+   format!("tui-{}", seed)
+}
+
+fn build_ssh_command(ssh_host: &SshHost, seed: u64) -> Command {
+    let session_name = tmux_session_name(seed);
+
+    let tmux_args: Vec<String> = vec![    
+        "set-option".into(), "-g".into(), "prefix".into(), "C-a".into(), "\\;".into(),
+        "bind".into(), "C-a".into(), "send-prefix".into(), "\\;".into(),
+        "unbind".into(), "C-b".into(), "\\;".into(),
+
+        // --- quickly enabeling mouse or allowing copying
+        "bind".into(), "m".into(), "set-option -g mouse ; display-message \"Mouse: #{?mouse,ON,OFF}\"".into(), "\\;".into(),
+
+        // --- latency / nested tmux ---
+        "set-option".into(), "-sg".into(), "escape-time".into(), "0".into(), "\\;".into(),
+        "set-option".into(), "-g".into(), "focus-events".into(), "on".into(), "\\;".into(),
+        "set-window-option".into(), "-g".into(), "aggressive-resize".into(), "on".into(), "\\;".into(),
+        "set-option".into(), "-g".into(), "allow-passthrough".into(), "on".into(), "\\;".into(),
+
+        // --- color ---
+        "set-option".into(), "-g".into(), "default-terminal".into(), "tmux-256color".into(), "\\;".into(),
+        "set-option".into(), "-ga".into(), "terminal-overrides".into(), ",*256col*:Tc".into(), "\\;".into(),
+
+        // --- ergonomics ---
+        "set-option".into(), "-g".into(), "history-limit".into(), "50000".into(), "\\;".into(),
+        "set-option".into(), "-g".into(), "mouse".into(), "on".into(), "\\;".into(),
+        "set-option".into(), "-g".into(), "set-clipboard".into(), "on".into(), "\\;".into(),
+        "set-option".into(), "-g".into(), "exit-empty".into(), "on".into(), "\\;".into(),
+
+        // --- inactivity cleanup (3h after last client detaches) ---
+        "set-option".into(), "-g".into(), "destroy-unattached".into(), "off".into(), "\\;".into(),
+        "set-hook".into(), "-g".into(), "client-detached".into(),
+        format!(
+            "run-shell -b \"sleep 10800; tmux has-session -t {n} 2>/dev/null && tmux list-clients -t {n} 2>/dev/null | grep -q . || tmux kill-session -t {n}\"",
+            n = session_name
+        ),
+        "\\;".into(),
+
+        // --- the actual session ---
+        "new-session".into(), "-A".into(), "-s".into(), session_name.clone(),
+    ];
+    
+    let remote_tmux_command = tmux_args
+        .iter()
+        .map(|arg| 
+            if arg == "\\;" { 
+                arg.clone() 
+            } else {
+            shell_quote(arg)
+            })
+        .collect::<Vec<_>>()
+        .join(" ");
+
+    let inner = format!(        
+        "if command -v tmux >/dev/null 2>&1; then exec env -u TMUX tmux -u {}; else exec \"$SHELL\" -l; fi",
+        remote_tmux_command
+    );
+
+    let remote_command = format!("sh -c {}", shell_quote(&inner));
+    info!("remote_command: {}", remote_command);
+    
+    let mut cmd = Command::new("ssh");
+    cmd.args(ssh_base_args(ssh_host));
+    cmd.arg("-tt"); // force pty
+    cmd.arg(&ssh_host.host);
+    cmd.arg("--");
+    cmd.arg(remote_command);
+    cmd.stdin(Stdio::inherit()) 
+        .stdout(Stdio::inherit()) 
+        .stderr(Stdio::inherit());
+
+    cmd
+}
+
+pub fn start_ssh_process(ssh_host: SshHost, seed: u64) {
         info!("starting ssh");
 
-        let mut child = Command::new("ssh");
-        child.args(ssh_base_args(&ssh_host));
-        child.args([
-            &ssh_host.host
-        ]);
+        loop {
+            let connection_attemt_start =  Instant::now();
 
-        child.stdin(Stdio::inherit())
-            .stdout(Stdio::inherit())
-            .stderr(Stdio::inherit());
+            let status = match build_ssh_command(&ssh_host, seed).spawn() {
+                Ok(mut child) => child.wait(),
+                Err(e) => {
+                    error!("failed to spawn ssh process: {}", e);
+                    return;
+                }
+            };
 
-        match child.spawn() {
-            Ok(mut process) => {
-                let _ = process.wait();
-            },
-            Err(e) => {
-                error!("starting ssh failed: {}", e);
+            match status {
+                Ok(status) if status.code().unwrap_or(-1) == SSH_CONNECTION_ERROR => {
+                    info!("ssh exited with code: {} -> reconnect", status.code().unwrap_or(-1));
+                },
+                Ok(status) => {
+                    info!("ssh exited with code: {} -> don't reconnect", status.code().unwrap_or(-1));
+                    return;
+                },
+                Err(e) => {
+                    error!("waiting for ssh failed: {}", e);
+                    return;
+                }
             }
-            
+
+            thread::sleep(Duration::from_secs(30).saturating_sub(connection_attemt_start.elapsed()));
         }
 }
 

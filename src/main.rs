@@ -71,7 +71,7 @@ fn process_app_commands(app: &mut App, mut terminal: &mut Terminal<CrosstermBack
             AppCommand::StartSsh => {
                 restore_terminal_to_normal_mode(&mut terminal)?;
                 
-                start_ssh_process(app.selected_ssh_host.clone());
+                start_ssh_process(app.selected_ssh_host.clone(), app.session_seed);
                 process::exit(0);
             },
         }
