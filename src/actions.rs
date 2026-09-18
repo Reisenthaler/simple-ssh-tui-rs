@@ -2,7 +2,18 @@ use std::{ fs, str, sync::atomic::Ordering };
 
 use tracing::{error, info};
 
-use crate::{app::{App, AppCommand::{ Quit, StartSsh}, AppMode, RsyncActiveInput, StatusMsg, StatusMsgLevel::Error, filter_suggestions, PathSuggestions, LsCacheEntry }, ssh_operations };
+use crate::app::{
+    App, 
+    AppCommand::{ Quit, StartSsh}, 
+    AppMode, 
+    RsyncActiveInput, 
+    StatusMsg, 
+    StatusMsgLevel::{ Warn, Error }, 
+    filter_suggestions, 
+    PathSuggestions, 
+    LsCacheEntry 
+};
+use crate::ssh_operations;
 
 pub enum Action {
     Quit,
@@ -76,7 +87,7 @@ fn handle_enter(app: &mut App) {
 
                     std::thread::sleep(std::time::Duration::from_millis(500));
                     if ssh_operations::check_control_master(&app.selected_ssh_host) {
-                        app.app_mode = AppMode::Rsync;
+                        app.app_mode = AppMode::Rsync;          // this has to be made dynamic if password promt gets used for different App modes other than Rsync
                     } else {
                         match app.status_msgs_tx.send(StatusMsg{ level: Error, msg: "failed to establisch control master".to_string() }) {
                             Ok(_) => info!("succsesfully sent status msg: \"failed to establisch control master\""),
@@ -494,4 +505,34 @@ fn prefetch_remote_subdirs(app: &App, folder_list: Vec<String>, parent_dir: &str
 
         ssh_operations::run_ls_over_ssh(app.selected_ssh_host.clone(), child_path, app.remote_autocomplet_tx.clone(), app.status_msgs_tx.clone());
     }
+}
+
+
+pub fn trigger_reconnect(app: &mut App) {
+    if app.reconnect_in_progress {
+        return;
+    }
+
+    info!("triggering reconnect");
+    app.reconnect_in_progress = true;
+    app.remote_ls_cache.clear();
+    app.ssh_login_input.clear();
+    app.ssh_login_output.clear();
+    
+    if app.sync_active.load(Ordering::Relaxed) {
+        app.sync_active.store(false, Ordering::Relaxed);
+        if let Err(e) = app.status_msgs_tx.send(
+            StatusMsg { level: Warn, 
+                        msg: "connection lost -> pause sync -> reconnect".to_string() 
+            }
+            ) {
+                
+             error!("failed to send status msg to status_msg channel: {}", e);        
+        }
+    }
+
+    let (tx, rx) = ssh_operations::start_background_ssh(app.selected_ssh_host.clone());
+
+    app.ssh_portable_pty_input_tx = tx;
+    app.ssh_portable_pty_output_rx = rx;
 }

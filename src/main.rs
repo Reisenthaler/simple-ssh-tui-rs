@@ -1,4 +1,11 @@
-use std::{ time::Duration,  io::Stdout, process, path::PathBuf, fs, os::unix::fs::PermissionsExt };
+use std::{ 
+    time::{ Duration, Instant },  
+    io::Stdout, 
+    process, 
+    path::PathBuf, 
+    fs, 
+    os::unix::fs::PermissionsExt 
+};
 
 use crossterm::event::{ self, Event };
 use beautiful_log;
@@ -38,7 +45,6 @@ fn main() -> Result<()> {
             error!("failed to prepare bundeled rsync binary -> use host rsync error: {}", e)
         },
     }
-
     
     let mut terminal = setup_terminal(app.ssh_hosts.len())?;
        
@@ -57,7 +63,8 @@ fn main() -> Result<()> {
         process_msgs_on_channels(&mut app);
 
         process_app_commands(&mut app, &mut terminal)?;
-        
+
+        rsync_connection_check(&mut app);
     }
 }
 
@@ -111,9 +118,11 @@ fn process_msgs_on_channels(app: &mut App) {
     if let Ok(ssh_login_output) = app.ssh_portable_pty_output_rx.try_recv() {
         match ssh_login_output {
             SshEstablishControlMaster::Succsess => {
+                app.reconnect_in_progress = false;
                 app.app_mode = AppMode::Rsync;
             },
             SshEstablishControlMaster::Failure => {
+                app.reconnect_in_progress = false;
                 app.app_mode = AppMode::SelectHost;
             },
             SshEstablishControlMaster::PasswordPromt(text) => {
@@ -181,4 +190,21 @@ fn log_dir(app_name: &str) -> String {
     }
    
     return "simple-ssh-tui-rs.log".to_string(); 
+}
+
+
+fn rsync_connection_check(app: &mut App) {
+    if app.app_mode == AppMode::Rsync {
+        if app.last_rsync_connection_check.elapsed() > Duration::from_secs(15) {
+            info!("running rsync_connection_check");
+
+            app.last_rsync_connection_check = Instant::now();
+
+            if !app.reconnect_in_progress && !ssh_operations::check_control_master(&app.selected_ssh_host) {
+                info!("rsync connection check failed -> reconnecting");
+
+                actions::trigger_reconnect(app);
+            }
+        }
+    }
 }

@@ -102,7 +102,9 @@ pub struct App {
     pub sync_active: Arc<AtomicBool>,
     pub search_query: String,
     pub rsync_path: Option<PathBuf>,
-    pub session_seed: u64
+    pub session_seed: u64,
+    pub reconnect_in_progress: bool,
+    pub last_rsync_connection_check: Instant
 }
 impl App {
     pub fn get_filtered_ssh_hosts(&self) -> Vec<&SshHost>{
@@ -187,7 +189,9 @@ pub fn init_app() -> Result<App> {
         sync_active: Arc::new(AtomicBool::new(false)),
         search_query: "".to_string(),
         rsync_path: None,
-        session_seed: generate_session_seed()
+        session_seed: generate_session_seed(),
+        reconnect_in_progress: false,
+        last_rsync_connection_check: Instant::now()
     })
 }
 
