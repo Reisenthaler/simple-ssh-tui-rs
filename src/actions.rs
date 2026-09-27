@@ -76,8 +76,6 @@ fn handle_enter(app: &mut App) {
             app.commands.push_back(StartSsh);
         },
         AppMode::Rsync => {
-            // rsync local -> remote
-            ssh_operations::run_rsync_process(app.rsync_path.clone(), app.selected_ssh_host.clone(), app.rsync_local_path.clone(), app.rsync_remote_path.clone(), ssh_operations::TransferDirection::Download, app.rsync_tx.clone());
         },
         AppMode::SshPasswordPromt => {
             let ssh_input_tx = &app.ssh_portable_pty_input_tx;
